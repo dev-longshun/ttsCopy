@@ -1,0 +1,56 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+*.icloud
+
+# Xcode
+build/
+DerivedData/
+*.xcuserstate
+*.xcuserdatad/
+xcuserdata/
+*.xcscmblueprint
+*.xccheckout
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved
+
+# CocoaPods
+Pods/
+
+# Carthage
+Carthage/Build/
+
+# fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots
+fastlane/test_output
+
+# IDE / Editor
+.idea/
+*.swp
+*.swo
+*~
+
+# Misc
+*.log
+.env
+.env.local
