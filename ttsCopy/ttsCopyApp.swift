@@ -41,6 +41,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         
         if let button = statusItem?.button {
+            // 菜单栏固定使用系统图标，不使用 App Icon
             button.image = NSImage(systemSymbolName: "message.circle", accessibilityDescription: "TTS Copy")
             button.action = #selector(togglePopover)
             button.target = self

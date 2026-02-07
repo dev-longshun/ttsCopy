@@ -42,13 +42,27 @@ class TelegramService: ObservableObject {
         case error = "连接错误"
     }
     
+    enum MessageContent: Equatable {
+        case text(String)
+        case photo(Data, caption: String?)
+        
+        var displayText: String {
+            switch self {
+            case .text(let str): return str
+            case .photo(_, let caption): return caption ?? "[图片]"
+            }
+        }
+    }
+    
     struct MessageItem: Identifiable, Equatable {
         let id: Int64
-        let text: String
+        let content: MessageContent
         let chatId: Int64
         let chatTitle: String?
         let senderName: String
         let timestamp: Date
+        
+        var text: String { content.displayText }
     }
     
     init() {
@@ -212,11 +226,12 @@ class TelegramService: ObservableObject {
     }
     
     @MainActor
-    private func processMessage(_ message: TelegramMessage) {
+    private func processMessage(_ message: TelegramMessage) async {
         let chatId = message.chat.id
         let chatTitle = message.chat.title ?? "私聊"
         let senderName = message.from?.firstName ?? "未知"
         let text = message.text ?? ""
+        let caption = message.caption
         
         // 打印收到的消息信息，方便调试和获取 Chat ID
         print("📨 收到消息:")
@@ -228,35 +243,82 @@ class TelegramService: ObservableObject {
         // 检查是否应该处理这条消息
         let shouldProcess = copyAllMessages || allowedChatIds.contains(chatId)
         
-        guard shouldProcess, !text.isEmpty else {
-            if !shouldProcess {
-                print("   ⚠️ Chat ID \(chatId) 不在允许列表中，已忽略")
-            }
+        guard shouldProcess else {
+            print("   ⚠️ Chat ID \(chatId) 不在允许列表中，已忽略")
             return
         }
         
-        // 创建消息记录
-        let messageItem = MessageItem(
-            id: Int64(message.messageId),
-            text: text,
-            chatId: chatId,
-            chatTitle: chatTitle,
-            senderName: senderName,
-            timestamp: Date()
-        )
-        
-        // 添加到最近消息列表（保留最近20条）
+        // 判断消息类型：图片 or 文字
+        if let photos = message.photo, !photos.isEmpty {
+            // 取最大尺寸的图片（数组最后一个）
+            let largestPhoto = photos.last!
+            print("   📷 收到图片，file_id: \(largestPhoto.fileId)")
+            
+            if let imageData = await downloadFile(fileId: largestPhoto.fileId) {
+                let content = MessageContent.photo(imageData, caption: caption)
+                let messageItem = MessageItem(
+                    id: Int64(message.messageId),
+                    content: content,
+                    chatId: chatId,
+                    chatTitle: chatTitle,
+                    senderName: senderName,
+                    timestamp: Date()
+                )
+                addMessageAndNotify(messageItem, chatTitle: chatTitle)
+                copyImageToClipboard(imageData, caption: caption)
+            } else {
+                print("   ❌ 图片下载失败")
+            }
+        } else if !text.isEmpty {
+            let content = MessageContent.text(text)
+            let messageItem = MessageItem(
+                id: Int64(message.messageId),
+                content: content,
+                chatId: chatId,
+                chatTitle: chatTitle,
+                senderName: senderName,
+                timestamp: Date()
+            )
+            addMessageAndNotify(messageItem, chatTitle: chatTitle)
+            copyToClipboard(text)
+        }
+    }
+    
+    @MainActor
+    private func addMessageAndNotify(_ messageItem: MessageItem, chatTitle: String) {
         recentMessages.insert(messageItem, at: 0)
         if recentMessages.count > 20 {
             recentMessages = Array(recentMessages.prefix(20))
         }
-        
-        // 复制到剪贴板
-        copyToClipboard(text)
-        
-        // 发送通知（若已开启）
         if showNotification {
-            sendNotification(title: chatTitle, body: text)
+            sendNotification(title: chatTitle, body: messageItem.text)
+        }
+    }
+    
+    /// 通过 file_id 获取文件路径并下载
+    private func downloadFile(fileId: String) async -> Data? {
+        // 1. 调用 getFile 获取 file_path
+        let urlString = "https://api.telegram.org/bot\(botToken)/getFile?file_id=\(fileId)"
+        guard let url = URL(string: urlString) else { return nil }
+        
+        do {
+            let (data, _) = try await URLSession.shared.data(from: url)
+            let response = try JSONDecoder().decode(TelegramFileResponse.self, from: data)
+            guard let filePath = response.result?.filePath else {
+                print("   ❌ getFile 未返回 file_path")
+                return nil
+            }
+            
+            // 2. 下载文件
+            let downloadUrl = "https://api.telegram.org/file/bot\(botToken)/\(filePath)"
+            guard let fileUrl = URL(string: downloadUrl) else { return nil }
+            
+            let (fileData, _) = try await URLSession.shared.data(from: fileUrl)
+            print("   ✅ 图片下载成功，大小: \(fileData.count) bytes")
+            return fileData
+        } catch {
+            print("   ❌ 下载文件失败: \(error)")
+            return nil
         }
     }
     
@@ -265,6 +327,22 @@ class TelegramService: ObservableObject {
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
         print("   ✅ 已复制到剪贴板")
+    }
+    
+    private func copyImageToClipboard(_ imageData: Data, caption: String?) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        
+        if let image = NSImage(data: imageData) {
+            pasteboard.writeObjects([image])
+            // 如果有 caption，同时写入文字
+            if let caption = caption, !caption.isEmpty {
+                pasteboard.setString(caption, forType: .string)
+            }
+            print("   ✅ 图片已复制到剪贴板")
+        } else {
+            print("   ❌ 无法解析图片数据")
+        }
     }
     
     private func sendNotification(title: String, body: String) {
@@ -378,6 +456,8 @@ struct TelegramMessage: Codable {
     let from: TelegramUser?
     let chat: TelegramChat
     let text: String?
+    let caption: String?
+    let photo: [TelegramPhotoSize]?
     let date: Int
     
     enum CodingKeys: String, CodingKey {
@@ -385,7 +465,25 @@ struct TelegramMessage: Codable {
         case from
         case chat
         case text
+        case caption
+        case photo
         case date
+    }
+}
+
+struct TelegramPhotoSize: Codable {
+    let fileId: String
+    let fileUniqueId: String
+    let width: Int
+    let height: Int
+    let fileSize: Int?
+    
+    enum CodingKeys: String, CodingKey {
+        case fileId = "file_id"
+        case fileUniqueId = "file_unique_id"
+        case width
+        case height
+        case fileSize = "file_size"
     }
 }
 
@@ -407,4 +505,19 @@ struct TelegramChat: Codable {
     let id: Int64
     let type: String
     let title: String?
+}
+
+struct TelegramFileResponse: Codable {
+    let ok: Bool
+    let result: TelegramFile?
+}
+
+struct TelegramFile: Codable {
+    let fileId: String
+    let filePath: String?
+    
+    enum CodingKeys: String, CodingKey {
+        case fileId = "file_id"
+        case filePath = "file_path"
+    }
 }

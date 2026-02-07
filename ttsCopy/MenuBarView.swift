@@ -183,9 +183,25 @@ struct MessageRow: View {
                     .foregroundColor(.secondary)
             }
             
-            Text(message.text)
-                .font(.body)
-                .lineLimit(2)
+            switch message.content {
+            case .text(let str):
+                Text(str)
+                    .font(.body)
+                    .lineLimit(2)
+            case .photo(let data, let caption):
+                if let nsImage = NSImage(data: data) {
+                    Image(nsImage: nsImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(maxHeight: 80)
+                        .cornerRadius(6)
+                }
+                if let caption = caption, !caption.isEmpty {
+                    Text(caption)
+                        .font(.caption)
+                        .lineLimit(1)
+                }
+            }
             
             HStack {
                 Text("Chat ID: \(message.chatId)")
@@ -194,8 +210,19 @@ struct MessageRow: View {
                 Spacer()
                 if isHovering {
                     Button("复制") {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(message.text, forType: .string)
+                        let pasteboard = NSPasteboard.general
+                        pasteboard.clearContents()
+                        switch message.content {
+                        case .text(let str):
+                            pasteboard.setString(str, forType: .string)
+                        case .photo(let data, let caption):
+                            if let image = NSImage(data: data) {
+                                pasteboard.writeObjects([image])
+                                if let caption = caption, !caption.isEmpty {
+                                    pasteboard.setString(caption, forType: .string)
+                                }
+                            }
+                        }
                     }
                     .font(.caption)
                     .buttonStyle(.plain)
