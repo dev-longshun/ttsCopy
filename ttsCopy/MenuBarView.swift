@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import Translation
 
 struct MenuBarView: View {
     @EnvironmentObject var telegramService: TelegramService
@@ -62,6 +63,15 @@ struct MenuBarView: View {
             // 通知开关
             Toggle(isOn: $telegramService.showNotification) {
                 Label("收到消息时显示通知", systemImage: "bell.fill")
+                    .font(.subheadline)
+            }
+            .toggleStyle(.switch)
+            .padding(.horizontal)
+            .padding(.vertical, 8)
+            
+            // 翻译开关（中文→英文）
+            Toggle(isOn: $telegramService.enableTranslation) {
+                Label("自动翻译为英文", systemImage: "character.book.closed.fill")
                     .font(.subheadline)
             }
             .toggleStyle(.switch)
@@ -147,6 +157,22 @@ struct MenuBarView: View {
             .padding()
         }
         .frame(width: 320)
+        .translationTask(telegramService.translationConfig) { session in
+            telegramService.translationSession = session
+        }
+        .onChange(of: telegramService.enableTranslation) { newValue in
+            if newValue {
+                telegramService.prepareTranslation()
+            } else {
+                telegramService.translationSession = nil
+                telegramService.translationConfig = nil
+            }
+        }
+        .onAppear {
+            if telegramService.enableTranslation {
+                telegramService.prepareTranslation()
+            }
+        }
         .sheet(isPresented: $showingSettings) {
             SettingsView()
                 .environmentObject(telegramService)

@@ -8,6 +8,7 @@
 import Foundation
 import AppKit
 import UserNotifications
+import Translation
 
 class TelegramService: ObservableObject {
     @Published var isPolling = false
@@ -31,9 +32,18 @@ class TelegramService: ObservableObject {
     @Published var showNotification: Bool {
         didSet { UserDefaults.standard.set(showNotification, forKey: "showNotification") }
     }
+    @Published var enableTranslation: Bool {
+        didSet { UserDefaults.standard.set(enableTranslation, forKey: "enableTranslation") }
+    }
     
     private var pollingTask: Task<Void, Never>?
     private var lastUpdateId: Int64 = 0
+    
+    /// 由 SwiftUI .translationTask 提供的翻译 session
+    var translationSession: TranslationSession?
+    
+    /// 翻译配置，修改后触发 .translationTask 重新获取 session
+    @Published var translationConfig: TranslationSession.Configuration?
     
     enum ConnectionStatus: String {
         case disconnected = "未连接"
@@ -72,6 +82,8 @@ class TelegramService: ObservableObject {
         self.copyAllMessages = UserDefaults.standard.bool(forKey: "copyAllMessages")
         // 默认开启通知
         self.showNotification = UserDefaults.standard.object(forKey: "showNotification") as? Bool ?? true
+        // 默认关闭翻译
+        self.enableTranslation = UserDefaults.standard.object(forKey: "enableTranslation") as? Bool ?? false
         
         // 请求通知权限
         requestNotificationPermission()
@@ -255,6 +267,14 @@ class TelegramService: ObservableObject {
             print("   📷 收到图片，file_id: \(largestPhoto.fileId)")
             
             if let imageData = await downloadFile(fileId: largestPhoto.fileId) {
+                // 如果开启翻译，翻译 caption
+                let translatedCaption: String?
+                if enableTranslation, let cap = caption, !cap.isEmpty {
+                    translatedCaption = await translateText(cap)
+                } else {
+                    translatedCaption = caption
+                }
+                
                 let content = MessageContent.photo(imageData, caption: caption)
                 let messageItem = MessageItem(
                     id: Int64(message.messageId),
@@ -265,11 +285,19 @@ class TelegramService: ObservableObject {
                     timestamp: Date()
                 )
                 addMessageAndNotify(messageItem, chatTitle: chatTitle)
-                copyImageToClipboard(imageData, caption: caption)
+                copyImageToClipboard(imageData, caption: translatedCaption)
             } else {
                 print("   ❌ 图片下载失败")
             }
         } else if !text.isEmpty {
+            // 如果开启翻译，先翻译再复制；消息列表显示原文
+            let textToCopy: String
+            if enableTranslation {
+                textToCopy = await translateText(text)
+            } else {
+                textToCopy = text
+            }
+            
             let content = MessageContent.text(text)
             let messageItem = MessageItem(
                 id: Int64(message.messageId),
@@ -280,7 +308,7 @@ class TelegramService: ObservableObject {
                 timestamp: Date()
             )
             addMessageAndNotify(messageItem, chatTitle: chatTitle)
-            copyToClipboard(text)
+            copyToClipboard(textToCopy)
         }
     }
     
@@ -319,6 +347,31 @@ class TelegramService: ObservableObject {
         } catch {
             print("   ❌ 下载文件失败: \(error)")
             return nil
+        }
+    }
+    
+    /// 使用 Apple Translation 框架翻译文本（中文→英文）
+    func translateText(_ text: String) async -> String {
+        guard let session = translationSession else {
+            return text
+        }
+        do {
+            let response = try await session.translate(text)
+            return response.targetText
+        } catch {
+            return text
+        }
+    }
+    
+    /// 初始化翻译配置，触发 .translationTask 获取 session
+    func prepareTranslation() {
+        if translationConfig == nil {
+            translationConfig = .init(
+                source: Locale.Language(identifier: "zh-Hans"),
+                target: Locale.Language(identifier: "en")
+            )
+        } else {
+            translationConfig?.invalidate()
         }
     }
     
