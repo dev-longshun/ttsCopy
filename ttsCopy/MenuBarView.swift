@@ -77,6 +77,36 @@ struct MenuBarView: View {
             .toggleStyle(.switch)
             .padding(.horizontal)
             .padding(.vertical, 8)
+
+            // 自动保存图片开关
+            Toggle(isOn: $telegramService.autoSaveImages) {
+                Label("自动保存图片", systemImage: "square.and.arrow.down.fill")
+                    .font(.subheadline)
+            }
+            .toggleStyle(.switch)
+            .padding(.horizontal)
+            .padding(.vertical, 8)
+
+            if telegramService.autoSaveImages {
+                HStack(spacing: 8) {
+                    Image(systemName: "folder.fill")
+                        .foregroundColor(.secondary)
+                        .font(.caption)
+                    Text(telegramService.imageSavePath)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Spacer()
+                    Button("更改") {
+                        chooseImageSavePath()
+                    }
+                    .font(.caption)
+                    .buttonStyle(.bordered)
+                }
+                .padding(.horizontal)
+                .padding(.bottom, 8)
+            }
             
             Divider()
             
@@ -179,6 +209,20 @@ struct MenuBarView: View {
         }
     }
     
+    private func chooseImageSavePath() {
+        let panel = NSOpenPanel()
+        panel.title = "选择图片保存位置"
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.canCreateDirectories = true
+        panel.directoryURL = URL(fileURLWithPath: telegramService.imageSavePath)
+
+        if panel.runModal() == .OK, let url = panel.url {
+            telegramService.imageSavePath = url.path
+        }
+    }
+
     var statusColor: Color {
         switch telegramService.connectionStatus {
         case .connected:

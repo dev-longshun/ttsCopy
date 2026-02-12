@@ -35,6 +35,12 @@ class TelegramService: ObservableObject {
     @Published var enableTranslation: Bool {
         didSet { UserDefaults.standard.set(enableTranslation, forKey: "enableTranslation") }
     }
+    @Published var autoSaveImages: Bool {
+        didSet { UserDefaults.standard.set(autoSaveImages, forKey: "autoSaveImages") }
+    }
+    @Published var imageSavePath: String {
+        didSet { UserDefaults.standard.set(imageSavePath, forKey: "imageSavePath") }
+    }
     
     private var pollingTask: Task<Void, Never>?
     private var lastUpdateId: Int64 = 0
@@ -84,6 +90,11 @@ class TelegramService: ObservableObject {
         self.showNotification = UserDefaults.standard.object(forKey: "showNotification") as? Bool ?? true
         // 默认关闭翻译
         self.enableTranslation = UserDefaults.standard.object(forKey: "enableTranslation") as? Bool ?? false
+        // 默认关闭自动保存图片
+        self.autoSaveImages = UserDefaults.standard.object(forKey: "autoSaveImages") as? Bool ?? false
+        // 默认保存到桌面
+        self.imageSavePath = UserDefaults.standard.string(forKey: "imageSavePath")
+            ?? NSSearchPathForDirectoriesInDomains(.desktopDirectory, .userDomainMask, true).first ?? ""
         
         // 请求通知权限
         requestNotificationPermission()
@@ -286,6 +297,9 @@ class TelegramService: ObservableObject {
                 )
                 addMessageAndNotify(messageItem, chatTitle: chatTitle)
                 copyImageToClipboard(imageData, caption: translatedCaption)
+                if autoSaveImages {
+                    saveImageToFile(imageData, caption: translatedCaption)
+                }
             } else {
                 print("   ❌ 图片下载失败")
             }
@@ -385,7 +399,7 @@ class TelegramService: ObservableObject {
     private func copyImageToClipboard(_ imageData: Data, caption: String?) {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
-        
+
         if let image = NSImage(data: imageData) {
             pasteboard.writeObjects([image])
             // 如果有 caption，同时写入文字
@@ -395,6 +409,38 @@ class TelegramService: ObservableObject {
             print("   ✅ 图片已复制到剪贴板")
         } else {
             print("   ❌ 无法解析图片数据")
+        }
+    }
+
+    /// 将图片保存到指定目录
+    private func saveImageToFile(_ imageData: Data, caption: String?) {
+        guard !imageSavePath.isEmpty else {
+            print("   ⚠️ 未设置图片保存路径")
+            return
+        }
+
+        let dirURL = URL(fileURLWithPath: imageSavePath)
+
+        // 确保目录存在
+        do {
+            try FileManager.default.createDirectory(at: dirURL, withIntermediateDirectories: true)
+        } catch {
+            print("   ❌ 创建目录失败: \(error)")
+            return
+        }
+
+        // 用时间戳生成文件名
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyyMMdd_HHmmss"
+        let timestamp = formatter.string(from: Date())
+        let fileName = "telegram_\(timestamp).jpg"
+        let fileURL = dirURL.appendingPathComponent(fileName)
+
+        do {
+            try imageData.write(to: fileURL)
+            print("   ✅ 图片已保存到: \(fileURL.path)")
+        } catch {
+            print("   ❌ 保存图片失败: \(error)")
         }
     }
     
