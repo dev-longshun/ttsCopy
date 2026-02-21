@@ -9,9 +9,9 @@ import SwiftUI
 import Translation
 
 struct MenuBarView: View {
-    @EnvironmentObject var telegramService: TelegramService
+    @EnvironmentObject var service: ServiceManager
     @State private var showingSettings = false
-    
+
     var body: some View {
         VStack(spacing: 0) {
             // 标题栏
@@ -21,56 +21,100 @@ struct MenuBarView: View {
                 Text("TTS Copy")
                     .font(.headline)
                 Spacer()
-                
-                // 连接状态指示灯
                 Circle()
                     .fill(statusColor)
                     .frame(width: 8, height: 8)
-                Text(telegramService.connectionStatus.rawValue)
+                Text(service.connectionStatus.rawValue)
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
             .padding()
             .background(Color(NSColor.windowBackgroundColor))
-            
+
             Divider()
-            
+
+            // 模式切换
+            Picker("", selection: $service.activeMode) {
+                ForEach(ServiceMode.allCases) { mode in
+                    Text(mode.rawValue).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal)
+            .padding(.vertical, 8)
+
             // 控制按钮
             HStack(spacing: 12) {
                 Button(action: {
-                    if telegramService.isPolling {
-                        telegramService.stopPolling()
+                    if service.isActive {
+                        service.stop()
                     } else {
-                        telegramService.startPolling()
+                        service.start()
                     }
                 }) {
                     HStack {
-                        Image(systemName: telegramService.isPolling ? "stop.fill" : "play.fill")
-                        Text(telegramService.isPolling ? "停止监听" : "开始监听")
+                        Image(systemName: service.isActive ? "stop.fill" : "play.fill")
+                        Text(buttonLabel)
                     }
                     .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(telegramService.isPolling ? .red : .green)
-                
+                .tint(service.isActive ? .red : .green)
+
                 Button(action: { showingSettings = true }) {
                     Image(systemName: "gear")
                 }
                 .buttonStyle(.bordered)
             }
             .padding()
-            
+
+            // LAN 状态信息
+            if service.activeMode == .lan && service.isActive {
+                GroupBox {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Text("IP 地址")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            Spacer()
+                            Text(service.localIPAddress)
+                                .font(.system(.caption, design: .monospaced))
+                                .textSelection(.enabled)
+                        }
+                        HStack {
+                            Text("端口号")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            Spacer()
+                            Text(String(service.lanPort))
+                                .font(.system(.caption, design: .monospaced))
+                                .textSelection(.enabled)
+                        }
+                        HStack {
+                            Text("已连接设备")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            Spacer()
+                            Text("\(service.lanConnectedDevices.count)")
+                                .font(.caption)
+                        }
+                    }
+                }
+                .padding(.horizontal)
+                .padding(.bottom, 8)
+            }
+
             // 通知开关
-            Toggle(isOn: $telegramService.showNotification) {
+            Toggle(isOn: $service.showNotification) {
                 Label("收到消息时显示通知", systemImage: "bell.fill")
                     .font(.subheadline)
             }
             .toggleStyle(.switch)
             .padding(.horizontal)
             .padding(.vertical, 8)
-            
-            // 翻译开关（中文→英文）
-            Toggle(isOn: $telegramService.enableTranslation) {
+
+            // 翻译开关
+            Toggle(isOn: $service.enableTranslation) {
                 Label("自动翻译为英文", systemImage: "character.book.closed.fill")
                     .font(.subheadline)
             }
@@ -79,7 +123,7 @@ struct MenuBarView: View {
             .padding(.vertical, 8)
 
             // 自动保存图片开关
-            Toggle(isOn: $telegramService.autoSaveImages) {
+            Toggle(isOn: $service.autoSaveImages) {
                 Label("自动保存图片", systemImage: "square.and.arrow.down.fill")
                     .font(.subheadline)
             }
@@ -87,31 +131,29 @@ struct MenuBarView: View {
             .padding(.horizontal)
             .padding(.vertical, 8)
 
-            if telegramService.autoSaveImages {
+            if service.autoSaveImages {
                 HStack(spacing: 8) {
                     Image(systemName: "folder.fill")
                         .foregroundColor(.secondary)
                         .font(.caption)
-                    Text(telegramService.imageSavePath)
+                    Text(service.imageSavePath)
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .lineLimit(1)
                         .truncationMode(.middle)
                     Spacer()
-                    Button("更改") {
-                        chooseImageSavePath()
-                    }
-                    .font(.caption)
-                    .buttonStyle(.bordered)
+                    Button("更改") { chooseImageSavePath() }
+                        .font(.caption)
+                        .buttonStyle(.bordered)
                 }
                 .padding(.horizontal)
                 .padding(.bottom, 8)
             }
-            
+
             Divider()
-            
+
             // 错误信息
-            if let error = telegramService.lastError {
+            if let error = service.lastError {
                 HStack {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundColor(.orange)
@@ -122,9 +164,9 @@ struct MenuBarView: View {
                 .padding(.horizontal)
                 .padding(.bottom, 8)
             }
-            
+
             Divider()
-            
+
             // 最近消息列表
             VStack(alignment: .leading, spacing: 0) {
                 HStack {
@@ -132,19 +174,17 @@ struct MenuBarView: View {
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                     Spacer()
-                    if !telegramService.recentMessages.isEmpty {
-                        Button("清空") {
-                            telegramService.recentMessages.removeAll()
-                        }
-                        .font(.caption)
-                        .buttonStyle(.plain)
-                        .foregroundColor(.blue)
+                    if !service.recentMessages.isEmpty {
+                        Button("清空") { service.recentMessages.removeAll() }
+                            .font(.caption)
+                            .buttonStyle(.plain)
+                            .foregroundColor(.blue)
                     }
                 }
                 .padding(.horizontal)
                 .padding(.vertical, 8)
-                
-                if telegramService.recentMessages.isEmpty {
+
+                if service.recentMessages.isEmpty {
                     VStack {
                         Spacer()
                         Image(systemName: "tray")
@@ -158,7 +198,7 @@ struct MenuBarView: View {
                 } else {
                     ScrollView {
                         LazyVStack(spacing: 0) {
-                            ForEach(telegramService.recentMessages) { message in
+                            ForEach(service.recentMessages) { message in
                                 MessageRow(message: message)
                                 Divider()
                             }
@@ -167,48 +207,52 @@ struct MenuBarView: View {
                     .frame(maxHeight: 200)
                 }
             }
-            
+
             Divider()
-            
-            // 底部按钮
+
+            // 底部
             HStack {
-                Button("退出") {
-                    NSApplication.shared.terminate(nil)
-                }
-                .buttonStyle(.plain)
-                .foregroundColor(.red)
-                
+                Button("退出") { NSApplication.shared.terminate(nil) }
+                    .buttonStyle(.plain)
+                    .foregroundColor(.red)
                 Spacer()
-                
-                Text("v1.0")
+                Text("v1.1")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
             .padding()
         }
         .frame(width: 320)
-        .translationTask(telegramService.translationConfig) { session in
-            telegramService.translationSession = session
+        .translationTask(service.translationConfig) { session in
+            service.translationSession = session
         }
-        .onChange(of: telegramService.enableTranslation) { newValue in
-            if newValue {
-                telegramService.prepareTranslation()
+        .onChange(of: service.enableTranslation) {
+            if service.enableTranslation {
+                service.prepareTranslation()
             } else {
-                telegramService.translationSession = nil
-                telegramService.translationConfig = nil
+                service.translationSession = nil
+                service.translationConfig = nil
             }
         }
         .onAppear {
-            if telegramService.enableTranslation {
-                telegramService.prepareTranslation()
+            if service.enableTranslation {
+                service.prepareTranslation()
             }
         }
         .sheet(isPresented: $showingSettings) {
             SettingsView()
-                .environmentObject(telegramService)
+                .environmentObject(service)
         }
     }
-    
+
+    private var buttonLabel: String {
+        if service.isActive {
+            return service.activeMode == .telegram ? "停止监听" : "停止服务"
+        } else {
+            return service.activeMode == .telegram ? "开始监听" : "启动服务"
+        }
+    }
+
     private func chooseImageSavePath() {
         let panel = NSOpenPanel()
         panel.title = "选择图片保存位置"
@@ -216,35 +260,30 @@ struct MenuBarView: View {
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
         panel.canCreateDirectories = true
-        panel.directoryURL = URL(fileURLWithPath: telegramService.imageSavePath)
-
+        panel.directoryURL = URL(fileURLWithPath: service.imageSavePath)
         if panel.runModal() == .OK, let url = panel.url {
-            telegramService.imageSavePath = url.path
+            service.imageSavePath = url.path
         }
     }
 
     var statusColor: Color {
-        switch telegramService.connectionStatus {
-        case .connected:
-            return .green
-        case .connecting:
-            return .yellow
-        case .error:
-            return .red
-        case .disconnected:
-            return .gray
+        switch service.connectionStatus {
+        case .connected: return .green
+        case .connecting: return .yellow
+        case .error: return .red
+        case .disconnected: return .gray
         }
     }
 }
 
 struct MessageRow: View {
-    let message: TelegramService.MessageItem
+    let message: MessageItem
     @State private var isHovering = false
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text(message.chatTitle ?? "私聊")
+                Text(message.sourceDetail ?? message.source)
                     .font(.caption)
                     .foregroundColor(.blue)
                 Spacer()
@@ -252,7 +291,7 @@ struct MessageRow: View {
                     .font(.caption2)
                     .foregroundColor(.secondary)
             }
-            
+
             switch message.content {
             case .text(let str):
                 Text(str)
@@ -272,9 +311,9 @@ struct MessageRow: View {
                         .lineLimit(1)
                 }
             }
-            
+
             HStack {
-                Text("Chat ID: \(message.chatId)")
+                Text(message.source)
                     .font(.caption2)
                     .foregroundColor(.secondary)
                 Spacer()
@@ -303,13 +342,11 @@ struct MessageRow: View {
         .padding(.horizontal)
         .padding(.vertical, 8)
         .background(isHovering ? Color.gray.opacity(0.1) : Color.clear)
-        .onHover { hovering in
-            isHovering = hovering
-        }
+        .onHover { hovering in isHovering = hovering }
     }
 }
 
 #Preview {
     MenuBarView()
-        .environmentObject(TelegramService())
+        .environmentObject(ServiceManager())
 }

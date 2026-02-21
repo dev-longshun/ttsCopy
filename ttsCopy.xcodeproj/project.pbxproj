@@ -12,6 +12,10 @@
 		A1B2C3D405 /* MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D406 /* MenuBarView.swift */; };
 		A1B2C3D407 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D408 /* SettingsView.swift */; };
 		A1B2C3D409 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A1B2C3D410 /* Assets.xcassets */; };
+		BFC2D2AF2F49DDCC000EF71E /* MessageProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFC2D2AC2F49DDCC000EF71E /* MessageProcessor.swift */; };
+		BFC2D2B02F49DDCC000EF71E /* MessageTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFC2D2AD2F49DDCC000EF71E /* MessageTypes.swift */; };
+		BFC2D2B12F49DDCC000EF71E /* ServiceManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFC2D2AE2F49DDCC000EF71E /* ServiceManager.swift */; };
+		BFC2D2B22F49DDCC000EF71E /* LANService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFC2D2AB2F49DDCC000EF71E /* LANService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -23,6 +27,10 @@
 		A1B2C3D410 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A1B2C3D411 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A1B2C3D412 /* ttsCopy.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ttsCopy.entitlements; sourceTree = "<group>"; };
+		BFC2D2AB2F49DDCC000EF71E /* LANService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LANService.swift; sourceTree = "<group>"; };
+		BFC2D2AC2F49DDCC000EF71E /* MessageProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageProcessor.swift; sourceTree = "<group>"; };
+		BFC2D2AD2F49DDCC000EF71E /* MessageTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageTypes.swift; sourceTree = "<group>"; };
+		BFC2D2AE2F49DDCC000EF71E /* ServiceManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceManager.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -47,6 +55,10 @@
 		A1B2C3D431 /* ttsCopy */ = {
 			isa = PBXGroup;
 			children = (
+				BFC2D2AB2F49DDCC000EF71E /* LANService.swift */,
+				BFC2D2AC2F49DDCC000EF71E /* MessageProcessor.swift */,
+				BFC2D2AD2F49DDCC000EF71E /* MessageTypes.swift */,
+				BFC2D2AE2F49DDCC000EF71E /* ServiceManager.swift */,
 				A1B2C3D402 /* ttsCopyApp.swift */,
 				A1B2C3D404 /* TelegramService.swift */,
 				A1B2C3D406 /* MenuBarView.swift */,
@@ -138,6 +150,10 @@
 				A1B2C3D401 /* ttsCopyApp.swift in Sources */,
 				A1B2C3D403 /* TelegramService.swift in Sources */,
 				A1B2C3D405 /* MenuBarView.swift in Sources */,
+				BFC2D2AF2F49DDCC000EF71E /* MessageProcessor.swift in Sources */,
+				BFC2D2B02F49DDCC000EF71E /* MessageTypes.swift in Sources */,
+				BFC2D2B12F49DDCC000EF71E /* ServiceManager.swift in Sources */,
+				BFC2D2B22F49DDCC000EF71E /* LANService.swift in Sources */,
 				A1B2C3D407 /* SettingsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

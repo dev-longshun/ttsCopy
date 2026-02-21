@@ -4,5 +4,11 @@
 <dict>
 	<key>LSMinimumSystemVersion</key>
 	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_ttscopy._tcp</string>
+	</array>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>ttsCopy 需要使用局域网来接收手机发送的消息</string>
 </dict>
 </plist>
