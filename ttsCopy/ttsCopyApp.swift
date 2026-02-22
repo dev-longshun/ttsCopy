@@ -21,7 +21,8 @@ struct ttsCopyApp: App {
 
 class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     var statusItem: NSStatusItem?
-    var popover: NSPopover?
+    var panel: NSPanel?
+    var eventMonitor: Any?
     let serviceManager = ServiceManager()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -44,26 +45,63 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
         if let button = statusItem?.button {
             button.image = NSImage(systemSymbolName: "message.circle", accessibilityDescription: "TTS Copy")
-            button.action = #selector(togglePopover)
+            button.action = #selector(togglePanel)
             button.target = self
         }
 
-        popover = NSPopover()
-        popover?.contentSize = NSSize(width: 320, height: 400)
-        popover?.behavior = .transient
-        popover?.contentViewController = NSHostingController(
+        let hostingView = NSHostingView(
             rootView: MenuBarView()
                 .environmentObject(serviceManager)
         )
+        hostingView.setFrameSize(NSSize(width: 320, height: 480))
+
+        let panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 480),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        panel.isFloatingPanel = true
+        panel.level = .statusBar
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = true
+        panel.isMovableByWindowBackground = false
+        panel.isReleasedWhenClosed = false
+        panel.contentView = hostingView
+        panel.animationBehavior = .utilityWindow
+
+        self.panel = panel
     }
 
-    @objc func togglePopover() {
-        guard let button = statusItem?.button, let popover = popover else { return }
-        if popover.isShown {
-            popover.performClose(nil)
+    @objc func togglePanel() {
+        guard let panel = panel, let button = statusItem?.button else { return }
+
+        if panel.isVisible {
+            closePanel()
         } else {
-            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+            let buttonRect = button.window!.convertToScreen(button.convert(button.bounds, to: nil))
+            let panelWidth = panel.frame.width
+            let panelHeight = panel.frame.height
+
+            let x = buttonRect.midX - panelWidth / 2
+            let y = buttonRect.minY - panelHeight
+
+            panel.setFrameOrigin(NSPoint(x: x, y: y))
+            panel.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
+
+            eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+                self?.closePanel()
+            }
+        }
+    }
+
+    func closePanel() {
+        panel?.orderOut(nil)
+        if let monitor = eventMonitor {
+            NSEvent.removeMonitor(monitor)
+            eventMonitor = nil
         }
     }
 

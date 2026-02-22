@@ -223,6 +223,8 @@ struct MenuBarView: View {
             .padding()
         }
         .frame(width: 320)
+        .background(VisualEffectView(material: .popover, blendingMode: .behindWindow))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .translationTask(service.translationConfig) { session in
             service.translationSession = session
         }
@@ -343,6 +345,24 @@ struct MessageRow: View {
         .padding(.vertical, 8)
         .background(isHovering ? Color.gray.opacity(0.1) : Color.clear)
         .onHover { hovering in isHovering = hovering }
+    }
+}
+
+struct VisualEffectView: NSViewRepresentable {
+    let material: NSVisualEffectView.Material
+    let blendingMode: NSVisualEffectView.BlendingMode
+
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.material = material
+        view.blendingMode = blendingMode
+        view.state = .active
+        return view
+    }
+
+    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
+        nsView.material = material
+        nsView.blendingMode = blendingMode
     }
 }
 
