@@ -7,6 +7,7 @@
 
 import SwiftUI
 import ServiceManagement
+import Translation
 
 struct SettingsView: View {
     @EnvironmentObject var service: ServiceManager
@@ -174,6 +175,116 @@ struct SettingsView: View {
                             }
                             .padding(.vertical, 8)
                         }
+
+                        // 语音识别
+                        GroupBox {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Label("语音识别 (ASR)", systemImage: "waveform")
+                                    .font(.headline)
+
+                                if service.asrReady {
+                                    // 已就绪
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .foregroundColor(.green)
+                                        Text("SenseVoice 模型已就绪")
+                                    }
+                                    Text("手机端录音将通过 Mac 进行高精度离线识别")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                } else if service.asrDownloading {
+                                    // 下载中
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        HStack {
+                                            Text("正在下载 SenseVoice 模型...")
+                                            Spacer()
+                                            Text("\(Int(service.asrDownloadProgress * 100))%")
+                                                .font(.system(.body, design: .monospaced))
+                                        }
+                                        ProgressView(value: service.asrDownloadProgress)
+                                        if !service.asrDownloadDesc.isEmpty {
+                                            Text(service.asrDownloadDesc)
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                        }
+                                        Button("取消下载") {
+                                            service.cancelASRDownload()
+                                        }
+                                        .buttonStyle(.bordered)
+                                        .controlSize(.small)
+                                    }
+                                } else if service.asrModelDownloaded {
+                                    // 已下载但未加载（可能加载失败）
+                                    if let error = service.asrError {
+                                        HStack(spacing: 6) {
+                                            Image(systemName: "exclamationmark.triangle.fill")
+                                                .foregroundColor(.orange)
+                                            Text(error)
+                                        }
+                                    } else {
+                                        HStack(spacing: 6) {
+                                            ProgressView().scaleEffect(0.7)
+                                            Text("模型加载中...")
+                                        }
+                                    }
+                                } else {
+                                    // 未下载
+                                    Text("需要下载 SenseVoice 语音识别模型才能使用 Mac 端高精度识别。")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                    if let error = service.asrError {
+                                        Text(error)
+                                            .font(.caption)
+                                            .foregroundColor(.red)
+                                    }
+                                    Button(action: { service.downloadASRModel() }) {
+                                        HStack {
+                                            Image(systemName: "arrow.down.circle")
+                                            Text("下载模型 (~239 MB)")
+                                        }
+                                    }
+                                    .buttonStyle(.borderedProminent)
+                                    .controlSize(.small)
+                                }
+                            }
+                            .padding(.vertical, 8)
+                        }
+                    }
+
+                    // 消息处理
+                    GroupBox {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Label("消息处理", systemImage: "text.bubble")
+                                .font(.headline)
+                            Toggle(isOn: $service.showNotification) {
+                                Label("收到消息时显示通知", systemImage: "bell.fill")
+                            }
+                            .toggleStyle(.switch)
+                            Toggle(isOn: $service.enableTranslation) {
+                                Label("自动翻译为英文", systemImage: "character.book.closed.fill")
+                            }
+                            .toggleStyle(.switch)
+                            Toggle(isOn: $service.autoSaveImages) {
+                                Label("自动保存图片", systemImage: "square.and.arrow.down.fill")
+                            }
+                            .toggleStyle(.switch)
+                            if service.autoSaveImages {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "folder.fill")
+                                        .foregroundColor(.secondary)
+                                    Text(service.imageSavePath)
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                        .lineLimit(1)
+                                        .truncationMode(.middle)
+                                    Spacer()
+                                    Button("更改") { chooseImageSavePath() }
+                                        .font(.caption)
+                                        .buttonStyle(.bordered)
+                                }
+                            }
+                        }
+                        .padding(.vertical, 8)
                     }
 
                     // 其他设置
@@ -228,9 +339,23 @@ struct SettingsView: View {
             }
             .padding()
         }
-        .frame(width: 400, height: 550)
+        .frame(width: 400, height: 620)
+        .translationTask(service.translationConfig) { session in
+            service.translationSession = session
+        }
+        .onChange(of: service.enableTranslation) {
+            if service.enableTranslation {
+                service.prepareTranslation()
+            } else {
+                service.translationSession = nil
+                service.translationConfig = nil
+            }
+        }
         .onAppear {
             botToken = service.botToken
+            if service.enableTranslation {
+                service.prepareTranslation()
+            }
         }
     }
 
@@ -243,6 +368,19 @@ struct SettingsView: View {
             }
         } catch {
             print("设置开机启动失败: \(error)")
+        }
+    }
+
+    private func chooseImageSavePath() {
+        let panel = NSOpenPanel()
+        panel.title = "选择图片保存位置"
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.canCreateDirectories = true
+        panel.directoryURL = URL(fileURLWithPath: service.imageSavePath)
+        if panel.runModal() == .OK, let url = panel.url {
+            service.imageSavePath = url.path
         }
     }
 

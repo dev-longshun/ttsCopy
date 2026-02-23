@@ -50,6 +50,9 @@ fastlane/test_output
 *.swo
 *~
 
+# ASR 模型文件（太大，不入库）
+models/
+
 # Misc
 *.log
 .env

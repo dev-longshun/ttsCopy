@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-import Translation
 
 struct MenuBarView: View {
     @EnvironmentObject var service: ServiceManager
@@ -21,15 +20,43 @@ struct MenuBarView: View {
                 Text("TTS Copy")
                     .font(.headline)
                 Spacer()
-                Circle()
-                    .fill(statusColor)
-                    .frame(width: 8, height: 8)
-                Text(service.connectionStatus.rawValue)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                Button(action: { showingSettings = true }) {
+                    Image(systemName: "gear")
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(.secondary)
             }
             .padding()
             .background(Color(NSColor.windowBackgroundColor))
+
+            Divider()
+
+            // 双服务状态栏
+            HStack(spacing: 16) {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(telegramStatusColor)
+                        .frame(width: 7, height: 7)
+                    Text("Telegram")
+                        .font(.caption)
+                    Text(telegramStatusText)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                Spacer()
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(lanStatusColor)
+                        .frame(width: 7, height: 7)
+                    Text("LAN")
+                        .font(.caption)
+                    Text(lanStatusText)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 6)
 
             Divider()
 
@@ -40,6 +67,7 @@ struct MenuBarView: View {
                 }
             }
             .pickerStyle(.segmented)
+            .labelsHidden()
             .padding(.horizontal)
             .padding(.vertical, 8)
 
@@ -47,9 +75,9 @@ struct MenuBarView: View {
             HStack(spacing: 12) {
                 Button(action: {
                     if service.isActive {
-                        service.stop()
+                        service.stopCurrentMode()
                     } else {
-                        service.start()
+                        service.startCurrentMode()
                     }
                 }) {
                     HStack {
@@ -59,12 +87,8 @@ struct MenuBarView: View {
                     .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
+                .controlSize(.large)
                 .tint(service.isActive ? .red : .green)
-
-                Button(action: { showingSettings = true }) {
-                    Image(systemName: "gear")
-                }
-                .buttonStyle(.bordered)
             }
             .padding()
 
@@ -103,54 +127,6 @@ struct MenuBarView: View {
                 .padding(.horizontal)
                 .padding(.bottom, 8)
             }
-
-            // 通知开关
-            Toggle(isOn: $service.showNotification) {
-                Label("收到消息时显示通知", systemImage: "bell.fill")
-                    .font(.subheadline)
-            }
-            .toggleStyle(.switch)
-            .padding(.horizontal)
-            .padding(.vertical, 8)
-
-            // 翻译开关
-            Toggle(isOn: $service.enableTranslation) {
-                Label("自动翻译为英文", systemImage: "character.book.closed.fill")
-                    .font(.subheadline)
-            }
-            .toggleStyle(.switch)
-            .padding(.horizontal)
-            .padding(.vertical, 8)
-
-            // 自动保存图片开关
-            Toggle(isOn: $service.autoSaveImages) {
-                Label("自动保存图片", systemImage: "square.and.arrow.down.fill")
-                    .font(.subheadline)
-            }
-            .toggleStyle(.switch)
-            .padding(.horizontal)
-            .padding(.vertical, 8)
-
-            if service.autoSaveImages {
-                HStack(spacing: 8) {
-                    Image(systemName: "folder.fill")
-                        .foregroundColor(.secondary)
-                        .font(.caption)
-                    Text(service.imageSavePath)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                    Spacer()
-                    Button("更改") { chooseImageSavePath() }
-                        .font(.caption)
-                        .buttonStyle(.bordered)
-                }
-                .padding(.horizontal)
-                .padding(.bottom, 8)
-            }
-
-            Divider()
 
             // 错误信息
             if let error = service.lastError {
@@ -225,22 +201,6 @@ struct MenuBarView: View {
         .frame(width: 320)
         .background(VisualEffectView(material: .popover, blendingMode: .behindWindow))
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .translationTask(service.translationConfig) { session in
-            service.translationSession = session
-        }
-        .onChange(of: service.enableTranslation) {
-            if service.enableTranslation {
-                service.prepareTranslation()
-            } else {
-                service.translationSession = nil
-                service.translationConfig = nil
-            }
-        }
-        .onAppear {
-            if service.enableTranslation {
-                service.prepareTranslation()
-            }
-        }
         .sheet(isPresented: $showingSettings) {
             SettingsView()
                 .environmentObject(service)
@@ -255,27 +215,44 @@ struct MenuBarView: View {
         }
     }
 
-    private func chooseImageSavePath() {
-        let panel = NSOpenPanel()
-        panel.title = "选择图片保存位置"
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.allowsMultipleSelection = false
-        panel.canCreateDirectories = true
-        panel.directoryURL = URL(fileURLWithPath: service.imageSavePath)
-        if panel.runModal() == .OK, let url = panel.url {
-            service.imageSavePath = url.path
-        }
-    }
+    // MARK: - 双服务状态
 
-    var statusColor: Color {
-        switch service.connectionStatus {
+    private var telegramStatusColor: Color {
+        switch service.telegramStatus {
         case .connected: return .green
         case .connecting: return .yellow
         case .error: return .red
         case .disconnected: return .gray
         }
     }
+
+    private var telegramStatusText: String {
+        switch service.telegramStatus {
+        case .connected: return "监听中"
+        case .connecting: return "连接中"
+        case .error: return "错误"
+        case .disconnected: return "未启动"
+        }
+    }
+
+    private var lanStatusColor: Color {
+        switch service.lanStatus {
+        case .connected: return .green
+        case .connecting: return .yellow
+        case .error: return .red
+        case .disconnected: return .gray
+        }
+    }
+
+    private var lanStatusText: String {
+        switch service.lanStatus {
+        case .connected: return "运行中"
+        case .connecting: return "启动中"
+        case .error: return "错误"
+        case .disconnected: return "未启动"
+        }
+    }
+
 }
 
 struct MessageRow: View {

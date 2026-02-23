@@ -19,6 +19,12 @@ struct ttsCopyApp: App {
     }
 }
 
+// MARK: - 可成为 Key Window 的面板（修复控件颜色渲染）
+
+class KeyablePanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+}
+
 class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     var statusItem: NSStatusItem?
     var panel: NSPanel?
@@ -29,14 +35,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         NSApp.setActivationPolicy(.accessory)
         setupMenuBar()
 
-        // Auto-start
+        // Auto-start：根据上次的面板模式启动对应服务
+        // 两个服务独立运行，这里只自动启动用户上次使用的模式
         switch serviceManager.activeMode {
         case .telegram:
             if !serviceManager.botToken.isEmpty {
-                serviceManager.start()
+                serviceManager.startCurrentMode()
             }
         case .lan:
-            serviceManager.start()
+            serviceManager.startCurrentMode()
         }
     }
 
@@ -55,7 +62,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         )
         hostingView.setFrameSize(NSSize(width: 320, height: 480))
 
-        let panel = NSPanel(
+        let panel = KeyablePanel(
             contentRect: NSRect(x: 0, y: 0, width: 320, height: 480),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
@@ -106,6 +113,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        serviceManager.stop()
+        serviceManager.stopTelegram()
+        serviceManager.stopLAN()
     }
 }

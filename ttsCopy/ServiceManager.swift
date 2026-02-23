@@ -3,6 +3,7 @@
 //  ttsCopy
 //
 //  统一服务管理，作为 UI 的 @EnvironmentObject
+//  支持 Telegram 和 LAN 双服务独立并行运行
 //
 
 import Foundation
@@ -11,20 +12,50 @@ import Translation
 
 class ServiceManager: ObservableObject {
 
-    // MARK: - Published State
+    // MARK: - 当前查看的面板（不影响服务运行状态）
 
     @Published var activeMode: ServiceMode {
         didSet {
             UserDefaults.standard.set(activeMode.rawValue, forKey: "serviceMode")
-            stop()
         }
     }
-    @Published var isActive = false
-    @Published var lastError: String?
-    @Published var recentMessages: [MessageItem] = []
-    @Published var connectionStatus: ConnectionStatus = .disconnected
 
-    // Shared settings
+    // MARK: - 双服务独立状态
+
+    @Published var telegramActive = false
+    @Published var telegramStatus: ConnectionStatus = .disconnected
+    @Published var telegramError: String?
+
+    @Published var lanActive = false
+    @Published var lanStatus: ConnectionStatus = .disconnected
+    @Published var lanError: String?
+
+    // 兼容 UI：根据当前面板返回对应服务的状态
+    var isActive: Bool {
+        switch activeMode {
+        case .telegram: return telegramActive
+        case .lan: return lanActive
+        }
+    }
+
+    var connectionStatus: ConnectionStatus {
+        switch activeMode {
+        case .telegram: return telegramStatus
+        case .lan: return lanStatus
+        }
+    }
+
+    var lastError: String? {
+        switch activeMode {
+        case .telegram: return telegramError
+        case .lan: return lanError
+        }
+    }
+
+    @Published var recentMessages: [MessageItem] = []
+
+    // MARK: - Shared Settings
+
     @Published var showNotification: Bool {
         didSet {
             UserDefaults.standard.set(showNotification, forKey: "showNotification")
@@ -47,7 +78,8 @@ class ServiceManager: ObservableObject {
         }
     }
 
-    // Telegram-specific
+    // MARK: - Telegram Settings
+
     @Published var botToken: String {
         didSet { UserDefaults.standard.set(botToken, forKey: "botToken") }
     }
@@ -58,12 +90,14 @@ class ServiceManager: ObservableObject {
         didSet { UserDefaults.standard.set(copyAllMessages, forKey: "copyAllMessages") }
     }
 
-    // LAN-specific
+    // MARK: - LAN Settings
+
     @Published var lanPort: UInt16 = 0
     @Published var lanConnectedDevices: [String] = []
     @Published var localIPAddress: String = ""
 
-    // Translation
+    // MARK: - Translation
+
     var translationSession: TranslationSession? {
         get { processor.translationSession }
         set { processor.translationSession = newValue }
@@ -75,6 +109,19 @@ class ServiceManager: ObservableObject {
     let processor = MessageProcessor()
     private var telegramService: TelegramService?
     private var lanService: LANService?
+    private let asrService = ASRService()
+
+    // MARK: - ASR State
+
+    @Published var asrReady = false
+    @Published var asrDownloading = false
+    @Published var asrDownloadProgress: Double = 0
+    @Published var asrDownloadDesc: String = ""
+    @Published var asrError: String?
+
+    var asrModelDownloaded: Bool { ASRService.isModelDownloaded }
+
+    // MARK: - Init
 
     init() {
         let modeString = UserDefaults.standard.string(forKey: "serviceMode") ?? ServiceMode.telegram.rawValue
@@ -99,43 +146,105 @@ class ServiceManager: ObservableObject {
         }
 
         localIPAddress = LANService.getLocalIPAddress() ?? "未知"
+
+        // 初始化 ASR 模型
+        initASR()
     }
 
-    // MARK: - Start / Stop
+    // MARK: - ASR
 
-    func start() {
-        stop()
-        switch activeMode {
-        case .telegram:
-            startTelegram()
-        case .lan:
-            startLAN()
+    private func initASR() {
+        guard ASRService.isModelDownloaded else {
+            print("⚠️ [ASR] 模型未下载，请在设置中下载。")
+            return
+        }
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let success = self?.asrService.initialize(modelsDir: ASRService.modelsDir) ?? false
+            DispatchQueue.main.async {
+                self?.asrReady = success
+                if !success {
+                    self?.asrError = "模型加载失败"
+                }
+            }
         }
     }
 
-    func stop() {
+    func downloadASRModel() {
+        asrDownloading = true
+        asrDownloadProgress = 0
+        asrDownloadDesc = "准备下载..."
+        asrError = nil
+
+        asrService.onDownloadProgress = { [weak self] progress, desc in
+            self?.asrDownloadProgress = progress
+            self?.asrDownloadDesc = desc
+        }
+        asrService.onDownloadComplete = { [weak self] success, error in
+            self?.asrDownloading = false
+            if success {
+                self?.asrDownloadDesc = "下载完成，正在加载模型..."
+                self?.initASR()
+            } else {
+                self?.asrError = error ?? "下载失败"
+                self?.asrDownloadDesc = ""
+            }
+        }
+        asrService.downloadModel()
+    }
+
+    func cancelASRDownload() {
+        asrService.cancelDownload()
+        asrDownloading = false
+        asrDownloadProgress = 0
+        asrDownloadDesc = ""
+    }
+
+    // MARK: - 当前面板的启停（UI 按钮调用）
+
+    func startCurrentMode() {
+        switch activeMode {
+        case .telegram: startTelegram()
+        case .lan: startLAN()
+        }
+    }
+
+    func stopCurrentMode() {
+        switch activeMode {
+        case .telegram: stopTelegram()
+        case .lan: stopLAN()
+        }
+    }
+
+    /// 兼容旧接口：启动当前模式
+    func start() { startCurrentMode() }
+
+    /// 兼容旧接口：停止当前模式
+    func stop() { stopCurrentMode() }
+
+    // MARK: - Telegram 独立启停
+
+    func stopTelegram() {
         telegramService?.stopPolling()
         telegramService = nil
-        lanService?.stop()
-        lanService = nil
-        isActive = false
-        connectionStatus = .disconnected
-        lastError = nil
-        lanConnectedDevices = []
-        lanPort = 0
+        telegramActive = false
+        telegramStatus = .disconnected
+        telegramError = nil
     }
 
     private func startTelegram() {
+        // 如果已在运行，先停止
+        if telegramActive { stopTelegram() }
+
         let service = TelegramService()
         service.botToken = botToken
         service.allowedChatIds = allowedChatIds
         service.copyAllMessages = copyAllMessages
 
         service.onStatusChange = { [weak self] status in
-            DispatchQueue.main.async { self?.connectionStatus = status }
+            DispatchQueue.main.async { self?.telegramStatus = status }
         }
         service.onError = { [weak self] error in
-            DispatchQueue.main.async { self?.lastError = error }
+            DispatchQueue.main.async { self?.telegramError = error }
         }
         service.onMessage = { [weak self] content, source, sourceDetail, senderName, messageId in
             guard let self = self else { return }
@@ -147,19 +256,34 @@ class ServiceManager: ObservableObject {
         }
 
         telegramService = service
-        isActive = true
-        connectionStatus = .connecting
+        telegramActive = true
+        telegramStatus = .connecting
         service.startPolling()
     }
 
+    // MARK: - LAN 独立启停
+
+    func stopLAN() {
+        lanService?.stop()
+        lanService = nil
+        lanActive = false
+        lanStatus = .disconnected
+        lanError = nil
+        lanConnectedDevices = []
+        lanPort = 0
+    }
+
     private func startLAN() {
+        // 如果已在运行，先停止
+        if lanActive { stopLAN() }
+
         let service = LANService()
 
         service.onStatusChange = { [weak self] status in
-            DispatchQueue.main.async { self?.connectionStatus = status }
+            DispatchQueue.main.async { self?.lanStatus = status }
         }
         service.onError = { [weak self] error in
-            DispatchQueue.main.async { self?.lastError = error }
+            DispatchQueue.main.async { self?.lanError = error }
         }
         service.onMessage = { [weak self] content, source, sourceDetail, senderName, messageId in
             guard let self = self else { return }
@@ -176,14 +300,33 @@ class ServiceManager: ObservableObject {
             DispatchQueue.main.async { self?.lanPort = port }
         }
 
+        // ASR：收到完整音频后在后台线程识别，结果回传手机
+        service.onAudioReceived = { [weak self] pcmData, sampleRate, connection in
+            guard let self = self else { return }
+            guard self.asrService.isReady else {
+                service.sendASRError(to: connection, message: "ASR 模型未就绪")
+                return
+            }
+            DispatchQueue.global(qos: .userInitiated).async {
+                let text = self.asrService.transcribe(pcmData: pcmData, sampleRate: sampleRate)
+                DispatchQueue.main.async {
+                    if text.isEmpty {
+                        service.sendASRError(to: connection, message: "识别结果为空")
+                    } else {
+                        service.sendASRFinal(to: connection, text: text)
+                    }
+                }
+            }
+        }
+
         lanService = service
-        isActive = true
+        lanActive = true
         do {
             try service.start()
         } catch {
-            lastError = "启动服务器失败: \(error.localizedDescription)"
-            isActive = false
-            connectionStatus = .error
+            lanError = "启动服务器失败: \(error.localizedDescription)"
+            lanActive = false
+            lanStatus = .error
         }
     }
 
