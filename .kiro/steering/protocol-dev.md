@@ -51,9 +51,9 @@ inclusion: auto
 1. **立即执行** `git diff --name-only HEAD` 和 `git diff HEAD --stat`
 2. 根据实际 diff 结果分析变更
 3. 检查是否包含调试日志，如有则询问用户是否清理
-4. 生成符合规范的 commit 信息（三个代码块格式）
+4. 生成符合规范的 commit 信息
 
-**🚨 禁止执行 `git commit`**：只输出 commit 信息供用户复制，由用户自行在 Git GUI 或命令行中提交。
+**`git commit` 流程**：先输出 commit 信息供用户审核，用户确认后再执行提交，提交内容必须与展示内容完全一致，禁止附加任何辅助编程标识信息（如 Co-Authored-By 等）。
 
 **详细规范**：#[[file:.kiro/steering/references/commit-guide.md]]
 

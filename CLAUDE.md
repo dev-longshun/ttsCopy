@@ -26,7 +26,7 @@ ttsCopy — macOS 菜单栏应用，双模式接收消息并复制到剪贴板�
 - Swift 5 语言模式 + SPM 6.0
 - 禁止命令行编译（`swift build`、`xcodebuild`），提醒用户手动编译
 - 禁止 `rm` 删除文件，必须用 `trash` 命令
-- 禁止执行 `git commit`，只输出 commit 信息供用户复制
+- `git commit` 流程：先输出 commit 信息供用户审核，用户确认后再执行提交，提交内容必须与展示内容完全一致，禁止附加任何辅助编程标识信息（如 Co-Authored-By 等）
 - 禁止使用 Markdown 表格，用列表替代
 - 开发完成后必须输出新增/修改文件清单
 
