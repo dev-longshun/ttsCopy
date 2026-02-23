@@ -40,8 +40,10 @@ class WhisperContext {
         guard let context = context else { return "" }
 
         let langCStr = strdup("zh")
-        var params = whisper_full_default_params(WHISPER_SAMPLING_GREEDY)
+        let promptCStr = strdup("以下是普通话的句子，包含标点符号。")
+        var params = whisper_full_default_params(WHISPER_SAMPLING_BEAM_SEARCH)
         params.language = UnsafePointer(langCStr)
+        params.initial_prompt = UnsafePointer(promptCStr)
         params.n_threads = Int32(max(1, ProcessInfo.processInfo.activeProcessorCount - 1))
         params.print_progress = false
         params.print_timestamps = false
@@ -55,6 +57,7 @@ class WhisperContext {
         }
 
         free(langCStr)
+        free(promptCStr)
 
         let elapsed = CFAbsoluteTimeGetCurrent() - startTime
 
