@@ -14,14 +14,15 @@
 		A1B2C3D409 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A1B2C3D410 /* Assets.xcassets */; };
 		BFBB9DD72F4C23E600844B6B /* ASRService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFBB9DD42F4C23E600844B6B /* ASRService.swift */; };
 		BFBB9DD82F4C23E600844B6B /* SherpaOnnx.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFBB9DD52F4C23E600844B6B /* SherpaOnnx.swift */; };
-		BFC2D2AF2F49DDCC000EF71E /* MessageProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFC2D2AC2F49DDCC000EF71E /* MessageProcessor.swift */; };
-		BFC2D2B02F49DDCC000EF71E /* MessageTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFC2D2AD2F49DDCC000EF71E /* MessageTypes.swift */; };
-		BFC2D2B12F49DDCC000EF71E /* ServiceManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFC2D2AE2F49DDCC000EF71E /* ServiceManager.swift */; };
-		BFC2D2B22F49DDCC000EF71E /* LANService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFC2D2AB2F49DDCC000EF71E /* LANService.swift */; };
+		BFBB9DDC2F4C3FA200844B6B /* StreamingASRService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFBB9DDB2F4C3FA200844B6B /* StreamingASRService.swift */; };
 		BFBB9DE32F4C240000844B6B /* libsherpa-onnx-c-api.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = BFBB9DE12F4C240000844B6B /* libsherpa-onnx-c-api.dylib */; };
 		BFBB9DE42F4C240000844B6B /* libonnxruntime.1.14.1.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = BFBB9DE22F4C240000844B6B /* libonnxruntime.1.14.1.dylib */; };
 		BFBB9DE52F4C240000844B6B /* libsherpa-onnx-c-api.dylib in Embed Libraries */ = {isa = PBXBuildFile; fileRef = BFBB9DE12F4C240000844B6B /* libsherpa-onnx-c-api.dylib */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		BFBB9DE62F4C240000844B6B /* libonnxruntime.1.14.1.dylib in Embed Libraries */ = {isa = PBXBuildFile; fileRef = BFBB9DE22F4C240000844B6B /* libonnxruntime.1.14.1.dylib */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		BFC2D2AF2F49DDCC000EF71E /* MessageProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFC2D2AC2F49DDCC000EF71E /* MessageProcessor.swift */; };
+		BFC2D2B02F49DDCC000EF71E /* MessageTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFC2D2AD2F49DDCC000EF71E /* MessageTypes.swift */; };
+		BFC2D2B12F49DDCC000EF71E /* ServiceManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFC2D2AE2F49DDCC000EF71E /* ServiceManager.swift */; };
+		BFC2D2B22F49DDCC000EF71E /* LANService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFC2D2AB2F49DDCC000EF71E /* LANService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -50,12 +51,13 @@
 		A1B2C3D412 /* ttsCopy.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ttsCopy.entitlements; sourceTree = "<group>"; };
 		BFBB9DD42F4C23E600844B6B /* ASRService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ASRService.swift; sourceTree = "<group>"; };
 		BFBB9DD52F4C23E600844B6B /* SherpaOnnx.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SherpaOnnx.swift; sourceTree = "<group>"; };
+		BFBB9DDB2F4C3FA200844B6B /* StreamingASRService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamingASRService.swift; sourceTree = "<group>"; };
+		BFBB9DE12F4C240000844B6B /* libsherpa-onnx-c-api.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = "libsherpa-onnx-c-api.dylib"; path = "sherpa-onnx/lib/libsherpa-onnx-c-api.dylib"; sourceTree = "<group>"; };
+		BFBB9DE22F4C240000844B6B /* libonnxruntime.1.14.1.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libonnxruntime.1.14.1.dylib; path = "sherpa-onnx/lib/libonnxruntime.1.14.1.dylib"; sourceTree = "<group>"; };
 		BFC2D2AB2F49DDCC000EF71E /* LANService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LANService.swift; sourceTree = "<group>"; };
 		BFC2D2AC2F49DDCC000EF71E /* MessageProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageProcessor.swift; sourceTree = "<group>"; };
 		BFC2D2AD2F49DDCC000EF71E /* MessageTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageTypes.swift; sourceTree = "<group>"; };
 		BFC2D2AE2F49DDCC000EF71E /* ServiceManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceManager.swift; sourceTree = "<group>"; };
-		BFBB9DE12F4C240000844B6B /* libsherpa-onnx-c-api.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = "libsherpa-onnx-c-api.dylib"; path = "sherpa-onnx/lib/libsherpa-onnx-c-api.dylib"; sourceTree = "<group>"; };
-		BFBB9DE22F4C240000844B6B /* libonnxruntime.1.14.1.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = "libonnxruntime.1.14.1.dylib"; path = "sherpa-onnx/lib/libonnxruntime.1.14.1.dylib"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -83,6 +85,7 @@
 		A1B2C3D431 /* ttsCopy */ = {
 			isa = PBXGroup;
 			children = (
+				BFBB9DDB2F4C3FA200844B6B /* StreamingASRService.swift */,
 				BFBB9DD42F4C23E600844B6B /* ASRService.swift */,
 				BFBB9DD52F4C23E600844B6B /* SherpaOnnx.swift */,
 				BFC2D2AB2F49DDCC000EF71E /* LANService.swift */,
@@ -189,6 +192,7 @@
 			files = (
 				A1B2C3D401 /* ttsCopyApp.swift in Sources */,
 				A1B2C3D403 /* TelegramService.swift in Sources */,
+				BFBB9DDC2F4C3FA200844B6B /* StreamingASRService.swift in Sources */,
 				A1B2C3D405 /* MenuBarView.swift in Sources */,
 				BFC2D2AF2F49DDCC000EF71E /* MessageProcessor.swift in Sources */,
 				BFC2D2B02F49DDCC000EF71E /* MessageTypes.swift in Sources */,

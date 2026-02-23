@@ -249,6 +249,76 @@ struct SettingsView: View {
                             }
                             .padding(.vertical, 8)
                         }
+
+                        // 流式识别
+                        GroupBox {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Label("流式识别", systemImage: "waveform.path")
+                                    .font(.headline)
+
+                                if service.streamingAsrReady {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .foregroundColor(.green)
+                                        Text("Zipformer 流式模型已就绪")
+                                    }
+                                    Text("录音过程中实时显示识别文本")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                } else if service.streamingAsrDownloading {
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        HStack {
+                                            Text("正在下载 Zipformer 流式模型...")
+                                            Spacer()
+                                            Text("\(Int(service.streamingAsrDownloadProgress * 100))%")
+                                                .font(.system(.body, design: .monospaced))
+                                        }
+                                        ProgressView(value: service.streamingAsrDownloadProgress)
+                                        if !service.streamingAsrDownloadDesc.isEmpty {
+                                            Text(service.streamingAsrDownloadDesc)
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                        }
+                                        Button("取消下载") {
+                                            service.cancelStreamingASRDownload()
+                                        }
+                                        .buttonStyle(.bordered)
+                                        .controlSize(.small)
+                                    }
+                                } else if service.streamingAsrModelDownloaded {
+                                    if let error = service.streamingAsrError {
+                                        HStack(spacing: 6) {
+                                            Image(systemName: "exclamationmark.triangle.fill")
+                                                .foregroundColor(.orange)
+                                            Text(error)
+                                        }
+                                    } else {
+                                        HStack(spacing: 6) {
+                                            ProgressView().scaleEffect(0.7)
+                                            Text("模型加载中...")
+                                        }
+                                    }
+                                } else {
+                                    Text("启用后，录音过程中实时显示识别文本。")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                    if let error = service.streamingAsrError {
+                                        Text(error)
+                                            .font(.caption)
+                                            .foregroundColor(.red)
+                                    }
+                                    Button(action: { service.downloadStreamingASRModel() }) {
+                                        HStack {
+                                            Image(systemName: "arrow.down.circle")
+                                            Text("下载模型 (~70 MB)")
+                                        }
+                                    }
+                                    .buttonStyle(.borderedProminent)
+                                    .controlSize(.small)
+                                }
+                            }
+                            .padding(.vertical, 8)
+                        }
                     }
 
                     // 消息处理
