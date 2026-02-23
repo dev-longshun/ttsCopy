@@ -109,8 +109,7 @@ class ServiceManager: ObservableObject {
     let processor = MessageProcessor()
     private var telegramService: TelegramService?
     private var lanService: LANService?
-    private let asrService = ASRService()
-    private let streamingASRService = StreamingASRService()
+    private let whisperASRService = WhisperASRService()
 
     // MARK: - ASR State
 
@@ -120,17 +119,8 @@ class ServiceManager: ObservableObject {
     @Published var asrDownloadDesc: String = ""
     @Published var asrError: String?
 
-    var asrModelDownloaded: Bool { ASRService.isModelDownloaded }
-
-    // MARK: - Streaming ASR State
-
-    @Published var streamingAsrReady = false
-    @Published var streamingAsrDownloading = false
-    @Published var streamingAsrDownloadProgress: Double = 0
-    @Published var streamingAsrDownloadDesc: String = ""
-    @Published var streamingAsrError: String?
-
-    var streamingAsrModelDownloaded: Bool { StreamingASRService.isModelDownloaded }
+    var asrModelDownloaded: Bool { WhisperASRService.isModelDownloaded }
+    var asrModelInfo: WhisperASRService.ModelInfo? { whisperASRService.modelInfo }
 
     // MARK: - Init
 
@@ -158,24 +148,23 @@ class ServiceManager: ObservableObject {
 
         localIPAddress = LANService.getLocalIPAddress() ?? "未知"
 
-        // 初始化 ASR 模型
+        // 初始化 Whisper ASR 模型
         initASR()
-        initStreamingASR()
     }
 
-    // MARK: - ASR
+    // MARK: - Whisper ASR
 
     private func initASR() {
-        guard ASRService.isModelDownloaded else {
-            print("⚠️ [ASR] 模型未下载，请在设置中下载。")
+        guard WhisperASRService.isModelDownloaded else {
+            print("⚠️ [Whisper] 模型未下载")
             return
         }
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let success = self?.asrService.initialize(modelsDir: ASRService.modelsDir) ?? false
+            let success = self?.whisperASRService.initialize() ?? false
             DispatchQueue.main.async {
                 self?.asrReady = success
                 if !success {
-                    self?.asrError = "模型加载失败"
+                    self?.asrError = "Whisper 模型加载失败"
                 }
             }
         }
@@ -187,80 +176,32 @@ class ServiceManager: ObservableObject {
         asrDownloadDesc = "准备下载..."
         asrError = nil
 
-        asrService.onDownloadProgress = { [weak self] progress, desc in
-            self?.asrDownloadProgress = progress
-            self?.asrDownloadDesc = desc
-        }
-        asrService.onDownloadComplete = { [weak self] success, error in
-            self?.asrDownloading = false
-            if success {
-                self?.asrDownloadDesc = "下载完成，正在加载模型..."
-                self?.initASR()
-            } else {
-                self?.asrError = error ?? "下载失败"
-                self?.asrDownloadDesc = ""
+        whisperASRService.onDownloadProgress = { [weak self] progress, desc in
+            DispatchQueue.main.async {
+                self?.asrDownloadProgress = progress
+                self?.asrDownloadDesc = desc
             }
         }
-        asrService.downloadModel()
+        whisperASRService.onDownloadComplete = { [weak self] success, error in
+            DispatchQueue.main.async {
+                self?.asrDownloading = false
+                if success {
+                    self?.asrDownloadDesc = "下载完成，正在加载模型..."
+                    self?.initASR()
+                } else {
+                    self?.asrError = error ?? "下载失败"
+                    self?.asrDownloadDesc = ""
+                }
+            }
+        }
+        whisperASRService.downloadModel()
     }
 
     func cancelASRDownload() {
-        asrService.cancelDownload()
+        whisperASRService.cancelDownload()
         asrDownloading = false
         asrDownloadProgress = 0
         asrDownloadDesc = ""
-    }
-
-    // MARK: - Streaming ASR
-
-    private func initStreamingASR() {
-        guard StreamingASRService.isModelDownloaded else {
-            print("⚠️ [StreamingASR] 流式模型未下载")
-            return
-        }
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let success = self?.streamingASRService.initialize(modelsDir: StreamingASRService.modelsDir) ?? false
-            DispatchQueue.main.async {
-                self?.streamingAsrReady = success
-                if !success {
-                    self?.streamingAsrError = "流式模型加载失败"
-                }
-            }
-        }
-    }
-
-    func downloadStreamingASRModel() {
-        streamingAsrDownloading = true
-        streamingAsrDownloadProgress = 0
-        streamingAsrDownloadDesc = "准备下载..."
-        streamingAsrError = nil
-
-        streamingASRService.onDownloadProgress = { [weak self] progress, desc in
-            DispatchQueue.main.async {
-                self?.streamingAsrDownloadProgress = progress
-                self?.streamingAsrDownloadDesc = desc
-            }
-        }
-        streamingASRService.onDownloadComplete = { [weak self] success, error in
-            DispatchQueue.main.async {
-                self?.streamingAsrDownloading = false
-                if success {
-                    self?.streamingAsrDownloadDesc = "下载完成，正在加载模型..."
-                    self?.initStreamingASR()
-                } else {
-                    self?.streamingAsrError = error ?? "下载失败"
-                    self?.streamingAsrDownloadDesc = ""
-                }
-            }
-        }
-        streamingASRService.downloadModel()
-    }
-
-    func cancelStreamingASRDownload() {
-        streamingASRService.cancelDownload()
-        streamingAsrDownloading = false
-        streamingAsrDownloadProgress = 0
-        streamingAsrDownloadDesc = ""
     }
 
     // MARK: - 当前面板的启停（UI 按钮调用）
@@ -364,50 +305,14 @@ class ServiceManager: ObservableObject {
             DispatchQueue.main.async { self?.lanPort = port }
         }
 
-        // ASR：收到完整音频后在后台线程识别，结果回传手机（非流式后备路径）
-        service.onAudioReceived = { [weak self] pcmData, sampleRate, connection in
-            guard let self = self else { return }
-            guard self.asrService.isReady else {
-                service.sendASRError(to: connection, message: "ASR 模型未就绪")
+        // 非流式 ASR 回调：录完整段后一次性识别
+        service.onAudioReceived = { [weak self] pcmData, sampleRate, connection, key in
+            guard let self = self, self.whisperASRService.isReady else {
+                service.sendASRError(to: connection, message: "Whisper 模型未就绪")
                 return
             }
             DispatchQueue.global(qos: .userInitiated).async {
-                let text = self.asrService.transcribe(pcmData: pcmData, sampleRate: sampleRate)
-                DispatchQueue.main.async {
-                    if text.isEmpty {
-                        service.sendASRError(to: connection, message: "识别结果为空")
-                    } else {
-                        service.sendASRFinal(to: connection, text: text)
-                    }
-                }
-            }
-        }
-
-        // 流式 ASR 回调
-        service.onAudioSessionStart = { [weak self] sampleRate, connection, key in
-            guard let self = self, self.streamingASRService.isReady else { return false }
-            self.streamingASRService.startSession()
-            return true
-        }
-
-        service.onAudioChunkReceived = { [weak self] pcmData, sampleRate, connection, key in
-            guard let self = self, self.streamingASRService.isReady else { return }
-            DispatchQueue.global(qos: .userInitiated).async {
-                if let partialText = self.streamingASRService.feedSamples(pcmData: pcmData, sampleRate: sampleRate) {
-                    DispatchQueue.main.async {
-                        service.sendASRPartial(to: connection, text: partialText)
-                    }
-                }
-            }
-        }
-
-        service.onAudioSessionEnd = { [weak self] connection, key in
-            guard let self = self, self.streamingASRService.isReady else {
-                service.sendASRError(to: connection, message: "流式 ASR 模型未就绪")
-                return
-            }
-            DispatchQueue.global(qos: .userInitiated).async {
-                let text = self.streamingASRService.endSession()
+                let text = self.whisperASRService.transcribe(pcmData: pcmData, sampleRate: sampleRate)
                 DispatchQueue.main.async {
                     if text.isEmpty {
                         service.sendASRError(to: connection, message: "识别结果为空")

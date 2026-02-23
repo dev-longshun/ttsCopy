@@ -183,20 +183,20 @@ struct SettingsView: View {
                                     .font(.headline)
 
                                 if service.asrReady {
-                                    // 已就绪
                                     HStack(spacing: 6) {
                                         Image(systemName: "checkmark.circle.fill")
                                             .foregroundColor(.green)
-                                        Text("SenseVoice 模型已就绪")
+                                        Text("Whisper Large V3 Turbo 已就绪")
                                     }
-                                    Text("手机端录音将通过 Mac 进行高精度离线识别")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
+                                    if let info = service.asrModelInfo {
+                                        Text(info.summary)
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
                                 } else if service.asrDownloading {
-                                    // 下载中
                                     VStack(alignment: .leading, spacing: 8) {
                                         HStack {
-                                            Text("正在下载 SenseVoice 模型...")
+                                            Text("正在下载 Whisper 模型...")
                                             Spacer()
                                             Text("\(Int(service.asrDownloadProgress * 100))%")
                                                 .font(.system(.body, design: .monospaced))
@@ -214,7 +214,6 @@ struct SettingsView: View {
                                         .controlSize(.small)
                                     }
                                 } else if service.asrModelDownloaded {
-                                    // 已下载但未加载（可能加载失败）
                                     if let error = service.asrError {
                                         HStack(spacing: 6) {
                                             Image(systemName: "exclamationmark.triangle.fill")
@@ -228,8 +227,7 @@ struct SettingsView: View {
                                         }
                                     }
                                 } else {
-                                    // 未下载
-                                    Text("需要下载 SenseVoice 语音识别模型才能使用 Mac 端高精度识别。")
+                                    Text("需要下载 Whisper Large V3 Turbo 语音识别模型。")
                                         .font(.caption)
                                         .foregroundColor(.secondary)
                                     if let error = service.asrError {
@@ -240,77 +238,7 @@ struct SettingsView: View {
                                     Button(action: { service.downloadASRModel() }) {
                                         HStack {
                                             Image(systemName: "arrow.down.circle")
-                                            Text("下载模型 (~239 MB)")
-                                        }
-                                    }
-                                    .buttonStyle(.borderedProminent)
-                                    .controlSize(.small)
-                                }
-                            }
-                            .padding(.vertical, 8)
-                        }
-
-                        // 流式识别
-                        GroupBox {
-                            VStack(alignment: .leading, spacing: 12) {
-                                Label("流式识别", systemImage: "waveform.path")
-                                    .font(.headline)
-
-                                if service.streamingAsrReady {
-                                    HStack(spacing: 6) {
-                                        Image(systemName: "checkmark.circle.fill")
-                                            .foregroundColor(.green)
-                                        Text("Zipformer 流式模型已就绪")
-                                    }
-                                    Text("录音过程中实时显示识别文本")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                } else if service.streamingAsrDownloading {
-                                    VStack(alignment: .leading, spacing: 8) {
-                                        HStack {
-                                            Text("正在下载 Zipformer 流式模型...")
-                                            Spacer()
-                                            Text("\(Int(service.streamingAsrDownloadProgress * 100))%")
-                                                .font(.system(.body, design: .monospaced))
-                                        }
-                                        ProgressView(value: service.streamingAsrDownloadProgress)
-                                        if !service.streamingAsrDownloadDesc.isEmpty {
-                                            Text(service.streamingAsrDownloadDesc)
-                                                .font(.caption)
-                                                .foregroundColor(.secondary)
-                                        }
-                                        Button("取消下载") {
-                                            service.cancelStreamingASRDownload()
-                                        }
-                                        .buttonStyle(.bordered)
-                                        .controlSize(.small)
-                                    }
-                                } else if service.streamingAsrModelDownloaded {
-                                    if let error = service.streamingAsrError {
-                                        HStack(spacing: 6) {
-                                            Image(systemName: "exclamationmark.triangle.fill")
-                                                .foregroundColor(.orange)
-                                            Text(error)
-                                        }
-                                    } else {
-                                        HStack(spacing: 6) {
-                                            ProgressView().scaleEffect(0.7)
-                                            Text("模型加载中...")
-                                        }
-                                    }
-                                } else {
-                                    Text("启用后，录音过程中实时显示识别文本。")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                    if let error = service.streamingAsrError {
-                                        Text(error)
-                                            .font(.caption)
-                                            .foregroundColor(.red)
-                                    }
-                                    Button(action: { service.downloadStreamingASRModel() }) {
-                                        HStack {
-                                            Image(systemName: "arrow.down.circle")
-                                            Text("下载模型 (~70 MB)")
+                                            Text("下载 Whisper Large V3 Turbo (~574 MB)")
                                         }
                                     }
                                     .buttonStyle(.borderedProminent)

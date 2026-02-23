@@ -18,12 +18,11 @@ class LANService {
     // ASR 音频会话状态（每个连接独立）
     private var audioSessions: [String: AudioSession] = [:]
 
-    /// 单个连接的音频会话
+    /// 单个连接的音频会话（非流式：积攒完整 PCM）
     private struct AudioSession {
         var sampleRate: Int
-        var pcmBuffer: Data       // 非流式模式积攒完整音频
         var sender: String
-        var isStreaming: Bool      // 流式模式标志
+        var pcmBuffer: Data
     }
 
     // Callbacks
@@ -32,12 +31,9 @@ class LANService {
     var onMessage: ((MessageContent, String, String?, String, Int64) async -> Void)?
     var onDevicesChanged: (([String]) -> Void)?
     var onPortAssigned: ((UInt16) -> Void)?
-    var onAudioReceived: ((Data, Int, NWConnection) -> Void)?
 
-    // 流式 ASR 回调
-    var onAudioSessionStart: ((Int, NWConnection, String) -> Bool)?  // 返回 true 表示流式模式已启用
-    var onAudioChunkReceived: ((Data, Int, NWConnection, String) -> Void)?
-    var onAudioSessionEnd: ((NWConnection, String) -> Void)?
+    // 非流式 ASR 回调：录完整段后一次性回调
+    var onAudioReceived: ((Data, Int, NWConnection, String) -> Void)?
 
     /// 默认固定端口，避免每次重启都分配新端口
     static let defaultPort: UInt16 = 8765
@@ -211,11 +207,8 @@ class LANService {
         case "audio_start":
             let key = connection.endpoint.debugDescription
             let sampleRate = json["sampleRate"] as? Int ?? 16000
-            let wantsStreaming = json["streaming"] as? Bool ?? false
-            // 询问 ServiceManager 是否能启用流式，不能则降级为批量模式
-            let streamingEnabled = wantsStreaming && (onAudioSessionStart?(sampleRate, connection, key) ?? false)
-            audioSessions[key] = AudioSession(sampleRate: sampleRate, pcmBuffer: Data(), sender: sender, isStreaming: streamingEnabled)
-            print("🎙️ [LAN] 音频会话开始: \(key), sampleRate=\(sampleRate), wantsStreaming=\(wantsStreaming), streamingEnabled=\(streamingEnabled)")
+            audioSessions[key] = AudioSession(sampleRate: sampleRate, sender: sender, pcmBuffer: Data())
+            print("🎙️ [LAN] 音频会话开始: \(key), sampleRate=\(sampleRate)")
 
         case "audio_stop":
             let key = connection.endpoint.debugDescription
@@ -224,12 +217,9 @@ class LANService {
                 sendASRError(to: connection, message: "无活跃音频会话")
                 return
             }
-            print("🎙️ [LAN] 音频会话结束: \(key), streaming=\(session.isStreaming), pcmBytes=\(session.pcmBuffer.count)")
-            if session.isStreaming {
-                onAudioSessionEnd?(connection, key)
-            } else {
-                onAudioReceived?(session.pcmBuffer, session.sampleRate, connection)
-            }
+            let pcmSize = Double(session.pcmBuffer.count) / 1024
+            print("🎙️ [LAN] 音频会话结束: \(key), PCM=\(String(format: "%.1f", pcmSize)) KB")
+            onAudioReceived?(session.pcmBuffer, session.sampleRate, connection, key)
 
         default:
             break
@@ -240,15 +230,9 @@ class LANService {
         guard let data = data else { return }
         let key = connection.endpoint.debugDescription
 
-        // 如果有活跃的音频会话，追加 PCM 数据
+        // 如果有活跃的音频会话，追加到 PCM buffer
         if audioSessions[key] != nil {
-            if audioSessions[key]!.isStreaming {
-                // 流式模式：实时转发 chunk，不积攒
-                onAudioChunkReceived?(data, audioSessions[key]!.sampleRate, connection, key)
-            } else {
-                // 非流式模式：积攒完整音频
-                audioSessions[key]!.pcmBuffer.append(data)
-            }
+            audioSessions[key]!.pcmBuffer.append(data)
             return
         }
 
@@ -274,16 +258,6 @@ class LANService {
 
         let metadata = NWProtocolWebSocket.Metadata(opcode: .text)
         let context = NWConnection.ContentContext(identifier: "status", metadata: [metadata])
-        connection.send(content: data, contentContext: context, completion: .idempotent)
-    }
-
-    /// 发送 ASR 流式中间结果
-    func sendASRPartial(to connection: NWConnection, text: String) {
-        let response: [String: Any] = ["type": "asr_partial", "text": text]
-        guard let data = try? JSONSerialization.data(withJSONObject: response) else { return }
-
-        let metadata = NWProtocolWebSocket.Metadata(opcode: .text)
-        let context = NWConnection.ContentContext(identifier: "asr_partial", metadata: [metadata])
         connection.send(content: data, contentContext: context, completion: .idempotent)
     }
 
