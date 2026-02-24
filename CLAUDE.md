@@ -28,6 +28,7 @@ ttsCopy — macOS 菜单栏应用，双模式接收消息并复制到剪贴板�
 - 禁止 `rm` 删除文件，必须用 `trash` 命令
 - `git commit` 流程：先输出 commit 信息供用户审核，用户确认后再执行提交，提交内容必须与展示内容完全一致，禁止附加任何辅助编程标识信息（如 Co-Authored-By 等）
 - 禁止使用 Markdown 表格，用列表替代
+- `git worktree` 规范：新建 worktree 时，必须将工作树创建在项目同级目录下，目录名格式为 `{项目名}--{分支名}`（分支名中的 `/` 替换为 `-`）。例如项目为 `ttsCopy`，分支为 `feat/login`，则 worktree 路径为 `../ttsCopy--feat-login/`。禁止使用默认的 `.git/worktrees` 或项目内部路径
 - 开发完成后必须输出新增/修改文件清单
 
 ## 文件结构

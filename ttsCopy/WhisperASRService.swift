@@ -287,24 +287,66 @@ class WhisperASRService: NSObject, URLSessionDownloadDelegate {
         return floats
     }
 
-    /// 编程术语后处理
+    /// 编程术语后处理：音译中文 → 英文原词
     private let codeDictionary: [(pattern: String, replacement: String)] = {
         let dict: [String: String] = [
+            // ── React Hooks 音译 ──
+            "优斯状态": "useState", "优斯一飞科特": "useEffect",
+            "优斯麦莫": "useMemo", "优斯瑞夫": "useRef",
+            "优斯回调": "useCallback", "优斯上下文": "useContext",
+
+            // ── 框架 / 库名 ──
+            "瑞克特": "React", "奈克斯特": "Next.js", "纳克斯特": "Nuxt",
+            "维尤": "Vue", "斯维尔特": "Svelte", "安哥拉": "Angular",
+            "泰普斯克瑞普特": "TypeScript", "加瓦斯克瑞普特": "JavaScript",
+            "维特": "Vite", "韦伯派克": "Webpack",
+            "泰尔温德": "Tailwind", "泰欧温德": "Tailwind",
+            "伊克斯波": "Expo", "伊克斯普瑞斯": "Express",
+
+            // ── 语言 ──
+            "派森": "Python", "拉斯特": "Rust", "斯威夫特": "Swift",
+            "科特林": "Kotlin", "加瓦": "Java",
+
+            // ── 运行时 / 工具链 ──
+            "诺德": "Node", "迪诺": "Deno", "邦": "Bun",
+            "多克": "Docker", "库伯内提斯": "Kubernetes",
+            "恩金艾克斯": "Nginx", "瑞迪斯": "Redis",
+
+            // ── 平台 / 网站 ──
+            "吉特": "Git", "吉特哈布": "GitHub", "吉特拉布": "GitLab",
+            "恩皮艾姆": "npm", "派派爱": "PyPI",
+            "弗赛尔": "Vercel", "奈特利法": "Netlify",
+            "克劳德弗莱尔": "Cloudflare",
+            "苏帕贝斯": "Supabase",
+
+            // ── AI 工具 ──
+            "克劳德科德": "Claude Code", "克劳德": "Claude",
+            "科派乐特": "Copilot", "柯塞尔": "Cursor",
+            "查特吉皮提": "ChatGPT", "欧喷艾爱": "OpenAI",
+
+            // ── 缩写读法 ──
+            "皮爱屁": "API", "杰森": "JSON",
+            "西艾斯艾斯": "CSS", "艾奇提艾姆艾尔": "HTML",
+            "艾斯蒂开": "SDK", "西艾尔爱": "CLI",
+            "优艾尔艾尔": "URL", "艾尔艾尔艾姆": "LLM",
+            "瑞斯特": "REST", "格拉夫丘艾尔": "GraphQL",
+
+            // ── JS/TS 关键字（中文直译） ──
+            "箭头函数": "=>", "展开运算符": "...", "展开": "...",
+            "等于等于等于": "===", "等于等于": "==", "不等于": "!==",
             "函数": "function", "常量": "const", "变量": "let",
             "如果": "if", "否则如果": "else if", "否则": "else",
             "返回": "return", "等待": "await", "异步": "async",
             "导入": "import", "导出": "export", "类型": "type",
             "接口": "interface", "类": "class", "空": "null",
             "未定义": "undefined", "真": "true", "假": "false",
-            "等于等于等于": "===", "等于等于": "==", "不等于": "!==",
-            "箭头函数": "=>", "展开": "...",
-            "优斯状态": "useState", "优斯一飞科特": "useEffect",
-            "优斯麦莫": "useMemo", "优斯瑞夫": "useRef", "优斯回调": "useCallback",
-            "瑞克特": "React", "泰普斯克瑞普特": "TypeScript",
-            "伊克斯波": "Expo", "诺德": "Node",
-            "克劳德": "Claude", "克劳德科德": "Claude Code",
-            "吉特": "Git", "吉特哈布": "GitHub",
-            "皮爱屁": "API", "杰森": "JSON",
+
+            // ── 开发流程术语 ──
+            "普尔瑞奎斯特": "pull request", "皮啊": "PR",
+            "科德瑞维尤": "code review",
+            "瑞贝斯": "rebase", "莫吉": "merge",
+            "迪普洛伊": "deploy", "迪巴格": "debug",
+            "瑞法克特": "refactor", "康米特": "commit",
         ]
         return dict.map { (pattern: $0.key, replacement: $0.value) }
             .sorted { $0.pattern.count > $1.pattern.count }

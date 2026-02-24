@@ -117,7 +117,6 @@
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
-/* PLACEHOLDER_REST */
 
 /* Begin PBXProject section */
 		A1B2C3D460 /* Project object */ = {
@@ -180,7 +179,6 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
-/* PLACEHOLDER_BUILD_SETTINGS */
 
 /* Begin XCBuildConfiguration section */
 		A1B2C3D470 /* Debug */ = {
@@ -307,7 +305,7 @@
 				CODE_SIGN_ENTITLEMENTS = ttsCopy/ttsCopy.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 4;
+				CURRENT_PROJECT_VERSION = 5;
 				DEVELOPMENT_TEAM = YV73GGQ26P;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -321,7 +319,7 @@
 				);
 				LIBRARY_SEARCH_PATHS = "$(PROJECT_DIR)/whisper/lib";
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 1.0.3;
+				MARKETING_VERSION = 1.0.4;
 				OTHER_LDFLAGS = (
 					"-lc++",
 					"-framework",
@@ -347,7 +345,7 @@
 				CODE_SIGN_ENTITLEMENTS = ttsCopy/ttsCopy.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 4;
+				CURRENT_PROJECT_VERSION = 5;
 				DEVELOPMENT_TEAM = YV73GGQ26P;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -361,7 +359,7 @@
 				);
 				LIBRARY_SEARCH_PATHS = "$(PROJECT_DIR)/whisper/lib";
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 1.0.3;
+				MARKETING_VERSION = 1.0.4;
 				OTHER_LDFLAGS = (
 					"-lc++",
 					"-framework",

@@ -42,12 +42,33 @@ class WhisperContext {
         guard let context = context else { return "" }
 
         let langCStr = strdup("zh")
+        // 编程专用 prompt：列出的词汇会显著提高 Whisper 对这些术语的识别率
         let prompt: String
         switch model {
         case .whisperTurbo:
-            prompt = "以下是普通话的句子，包含标点符号。"
+            prompt = """
+            以下是程序员的语音指令，包含中英文混合的编程术语和标点符号。\
+            React、Vue、Svelte、Angular、Next.js、Nuxt、TypeScript、JavaScript、Python、Rust、Go、Swift、Java、Kotlin、\
+            Node.js、Deno、Bun、Docker、Kubernetes、Nginx、Redis、PostgreSQL、MongoDB、SQLite、\
+            GitHub、GitLab、npm、Vercel、Netlify、Cloudflare、AWS、Supabase、\
+            API、JSON、CSS、HTML、SDK、CLI、URL、HTTP、WebSocket。
+            """
         case .belleTurbo:
-            prompt = "以下是程序员在编写Web代码时的语音指令，包含React、TypeScript、Next.js、useState、useEffect、className、onClick、async、await、const、interface、component、props、API、JSON、CSS、HTML、import、export、function、return等编程术语，包含标点符号。"
+            prompt = """
+            以下是程序员在编写代码时的语音指令，包含中英文混合的编程术语和标点符号。\
+            React、Vue、Svelte、Angular、Next.js、Nuxt、Vite、Webpack、Tailwind CSS、\
+            TypeScript、JavaScript、Python、Rust、Go、Swift、Java、Kotlin、C++、\
+            Node.js、Deno、Bun、Express、FastAPI、Django、Spring Boot、\
+            Docker、Kubernetes、Nginx、Redis、PostgreSQL、MongoDB、MySQL、SQLite、\
+            GitHub、GitLab、npm、PyPI、Homebrew、Vercel、Netlify、Cloudflare、AWS、Supabase、\
+            Claude、Cursor、Copilot、ChatGPT、OpenAI、LLM、RAG、\
+            useState、useEffect、useMemo、useRef、useCallback、className、onClick、onChange、\
+            async、await、const、let、var、interface、component、props、state、\
+            function、return、import、export、default、Promise、\
+            API、JSON、CSS、HTML、SDK、CLI、URL、HTTP、HTTPS、WebSocket、REST、GraphQL、\
+            git commit、git push、pull request、code review、merge、rebase、deploy、debug、refactor、\
+            middleware、webhook、endpoint、callback、payload、token、schema、migration。
+            """
         }
         let promptCStr = strdup(prompt)
         var params = whisper_full_default_params(WHISPER_SAMPLING_BEAM_SEARCH)
