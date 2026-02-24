@@ -35,12 +35,21 @@ class WhisperContext {
     }
 
     /// 识别 PCM Float32 音频，返回识别文本
-    /// - Parameter samples: 16kHz mono Float32 音频数据
-    func transcribe(samples: [Float]) -> String {
+    /// - Parameters:
+    ///   - samples: 16kHz mono Float32 音频数据
+    ///   - model: 当前使用的 ASR 模型，用于选择合适的 prompt
+    func transcribe(samples: [Float], model: ASRModel) -> String {
         guard let context = context else { return "" }
 
         let langCStr = strdup("zh")
-        let promptCStr = strdup("以下是普通话的句子，包含标点符号。")
+        let prompt: String
+        switch model {
+        case .whisperTurbo:
+            prompt = "以下是普通话的句子，包含标点符号。"
+        case .belleTurbo:
+            prompt = "以下是程序员在编写Web代码时的语音指令，包含React、TypeScript、Next.js、useState、useEffect、className、onClick、async、await、const、interface、component、props、API、JSON、CSS、HTML、import、export、function、return等编程术语，包含标点符号。"
+        }
+        let promptCStr = strdup(prompt)
         var params = whisper_full_default_params(WHISPER_SAMPLING_BEAM_SEARCH)
         params.language = UnsafePointer(langCStr)
         params.initial_prompt = UnsafePointer(promptCStr)

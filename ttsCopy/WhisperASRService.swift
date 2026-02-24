@@ -2,29 +2,83 @@
 //  WhisperASRService.swift
 //  ttsCopy
 //
-//  Whisper ASR 服务：模型下载、加载、识别
-//  使用 whisper.cpp + Whisper Large V3 Turbo 量化模型
+//  Whisper ASR 服务：多模型管理、下载、加载、识别
+//  支持 Whisper Large V3 Turbo 和 Belle-whisper V3 Turbo
 //
 
 import Foundation
+
+// MARK: - ASR 模型枚举
+
+enum ASRModel: String, CaseIterable, Identifiable {
+    case whisperTurbo = "whisper-turbo"
+    case belleTurbo = "belle-turbo"
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .whisperTurbo: return "Whisper Large V3 Turbo"
+        case .belleTurbo: return "Belle-whisper V3 Turbo (中文增强)"
+        }
+    }
+
+    var shortName: String {
+        switch self {
+        case .whisperTurbo: return "Whisper Turbo"
+        case .belleTurbo: return "Belle Turbo"
+        }
+    }
+
+    var fileName: String {
+        switch self {
+        case .whisperTurbo: return "ggml-large-v3-turbo-q5_0.bin"
+        case .belleTurbo: return "ggml-model.bin"
+        }
+    }
+
+    var downloadURL: String {
+        switch self {
+        case .whisperTurbo:
+            return "https://hf-mirror.com/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin"
+        case .belleTurbo:
+            return "https://hf-mirror.com/BELLE-2/Belle-whisper-large-v3-turbo-zh-ggml/resolve/main/ggml-model.bin"
+        }
+    }
+
+    var sizeMB: Int {
+        switch self {
+        case .whisperTurbo: return 574
+        case .belleTurbo: return 1620
+        }
+    }
+
+    var precision: String {
+        switch self {
+        case .whisperTurbo: return "q5_0"
+        case .belleTurbo: return "f16"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .whisperTurbo: return "OpenAI 原版，多语言通用"
+        case .belleTurbo: return "中文专项微调，编程术语更准"
+        }
+    }
+}
 
 class WhisperASRService: NSObject, URLSessionDownloadDelegate {
 
     private var whisperContext: WhisperContext?
     private(set) var isReady = false
+    private(set) var currentModel: ASRModel?
     private let processingQueue = DispatchQueue(label: "com.ttscopy.whisper-asr", qos: .userInitiated)
-
-    // MARK: - 模型信息
-
-    static let modelFileName = "ggml-large-v3-turbo-q5_0.bin"
-    static let modelDisplayName = "Whisper Large V3 Turbo"
-    static let modelPrecision = "q5_0"
-    static let modelSizeMB = 574
-    private static let downloadURL = "https://hf-mirror.com/ggerganov/whisper.cpp/resolve/main/\(modelFileName)"
 
     // MARK: - 下载状态
 
     private var downloadSession: URLSession?
+    private var downloadingModel: ASRModel?
     var onDownloadProgress: ((Double, String) -> Void)?
     var onDownloadComplete: ((Bool, String?) -> Void)?
 
@@ -42,17 +96,18 @@ class WhisperASRService: NSObject, URLSessionDownloadDelegate {
         return dir
     }
 
-    static var modelPath: String {
-        modelsDir + "/\(modelFileName)"
+    static func modelPath(for model: ASRModel) -> String {
+        modelsDir + "/\(model.fileName)"
     }
 
-    static var isModelDownloaded: Bool {
-        FileManager.default.fileExists(atPath: modelPath)
+    static func isModelDownloaded(_ model: ASRModel) -> Bool {
+        FileManager.default.fileExists(atPath: modelPath(for: model))
     }
 
     // MARK: - 模型下载
 
-    func downloadModel() {
+    func downloadModel(_ model: ASRModel) {
+        downloadingModel = model
         downloadStartTime = Date()
         lastReportTime = Date()
         lastReportedBytes = 0
@@ -61,15 +116,21 @@ class WhisperASRService: NSObject, URLSessionDownloadDelegate {
         let config = URLSessionConfiguration.default
         downloadSession = URLSession(configuration: config, delegate: self, delegateQueue: nil)
 
-        let url = URL(string: Self.downloadURL)!
-        print("📥 [Whisper] 开始下载: \(Self.modelFileName)")
+        let url = URL(string: model.downloadURL)!
+        print("📥 [Whisper] 开始下载: \(model.displayName) (\(model.fileName))")
         downloadSession?.downloadTask(with: url).resume()
     }
 
     func cancelDownload() {
         downloadSession?.invalidateAndCancel()
         downloadSession = nil
-        try? FileManager.default.removeItem(atPath: Self.modelPath)
+        if let model = downloadingModel {
+            let path = Self.modelPath(for: model)
+            if FileManager.default.fileExists(atPath: path) {
+                try? FileManager.default.removeItem(atPath: path)
+            }
+        }
+        downloadingModel = nil
     }
 
     // MARK: - URLSessionDownloadDelegate
@@ -101,17 +162,21 @@ class WhisperASRService: NSObject, URLSessionDownloadDelegate {
 
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask,
                     didFinishDownloadingTo location: URL) {
+        guard let model = downloadingModel else { return }
+        let targetPath = Self.modelPath(for: model)
         do {
-            if FileManager.default.fileExists(atPath: Self.modelPath) {
-                try FileManager.default.removeItem(atPath: Self.modelPath)
+            if FileManager.default.fileExists(atPath: targetPath) {
+                try FileManager.default.removeItem(atPath: targetPath)
             }
-            try FileManager.default.moveItem(atPath: location.path, toPath: Self.modelPath)
-            print("✅ [Whisper] 模型下载完成")
+            try FileManager.default.moveItem(atPath: location.path, toPath: targetPath)
+            print("✅ [Whisper] 模型下载完成: \(model.displayName)")
             DispatchQueue.main.async {
+                self.downloadingModel = nil
                 self.onDownloadComplete?(true, nil)
             }
         } catch {
             DispatchQueue.main.async {
+                self.downloadingModel = nil
                 self.onDownloadComplete?(false, "文件保存失败: \(error.localizedDescription)")
             }
         }
@@ -145,19 +210,21 @@ class WhisperASRService: NSObject, URLSessionDownloadDelegate {
 
     // MARK: - 初始化
 
-    func initialize() -> Bool {
-        guard Self.isModelDownloaded else {
-            print("❌ [Whisper] 模型文件不存在")
+    func initialize(model: ASRModel) -> Bool {
+        guard Self.isModelDownloaded(model) else {
+            print("❌ [Whisper] 模型文件不存在: \(model.displayName)")
             return false
         }
 
-        guard let ctx = WhisperContext.createContext(path: Self.modelPath) else {
+        let path = Self.modelPath(for: model)
+        guard let ctx = WhisperContext.createContext(path: path) else {
             return false
         }
 
         whisperContext = ctx
+        currentModel = model
         isReady = true
-        print("✅ [Whisper] ASR 服务就绪")
+        print("✅ [Whisper] ASR 服务就绪: \(model.displayName)")
         return true
     }
 
@@ -174,11 +241,11 @@ class WhisperASRService: NSObject, URLSessionDownloadDelegate {
     }
 
     var modelInfo: ModelInfo? {
-        guard isReady else { return nil }
+        guard isReady, let model = currentModel else { return nil }
         return ModelInfo(
-            name: Self.modelDisplayName,
-            precision: Self.modelPrecision,
-            sizeMB: Self.modelSizeMB
+            name: model.displayName,
+            precision: model.precision,
+            sizeMB: model.sizeMB
         )
     }
 
@@ -186,13 +253,13 @@ class WhisperASRService: NSObject, URLSessionDownloadDelegate {
 
     /// 接收 Int16 PCM 数据，转 Float32 后调用 Whisper 识别
     func transcribe(pcmData: Data, sampleRate: Int = 16000) -> String {
-        guard let whisperContext = whisperContext, isReady else { return "" }
+        guard let whisperContext = whisperContext, let model = currentModel, isReady else { return "" }
 
         return processingQueue.sync {
             let samples = pcmToFloat(pcmData)
             guard !samples.isEmpty else { return "" }
 
-            let rawText = whisperContext.transcribe(samples: samples)
+            let rawText = whisperContext.transcribe(samples: samples, model: model)
             return processCodeText(rawText)
         }
     }

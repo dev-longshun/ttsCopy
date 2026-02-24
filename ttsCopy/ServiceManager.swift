@@ -113,13 +113,20 @@ class ServiceManager: ObservableObject {
 
     // MARK: - ASR State
 
+    @Published var selectedASRModel: ASRModel {
+        didSet {
+            UserDefaults.standard.set(selectedASRModel.rawValue, forKey: "selectedASRModel")
+        }
+    }
     @Published var asrReady = false
     @Published var asrDownloading = false
     @Published var asrDownloadProgress: Double = 0
     @Published var asrDownloadDesc: String = ""
     @Published var asrError: String?
 
-    var asrModelDownloaded: Bool { WhisperASRService.isModelDownloaded }
+    func isASRModelDownloaded(_ model: ASRModel) -> Bool {
+        WhisperASRService.isModelDownloaded(model)
+    }
     var asrModelInfo: WhisperASRService.ModelInfo? { whisperASRService.modelInfo }
 
     // MARK: - Init
@@ -136,6 +143,9 @@ class ServiceManager: ObservableObject {
         self.autoSaveImages = UserDefaults.standard.object(forKey: "autoSaveImages") as? Bool ?? false
         self.imageSavePath = UserDefaults.standard.string(forKey: "imageSavePath")
             ?? NSSearchPathForDirectoriesInDomains(.desktopDirectory, .userDomainMask, true).first ?? ""
+
+        let savedModel = UserDefaults.standard.string(forKey: "selectedASRModel") ?? ASRModel.whisperTurbo.rawValue
+        self.selectedASRModel = ASRModel(rawValue: savedModel) ?? .whisperTurbo
 
         processor.showNotification = showNotification
         processor.autoSaveImages = autoSaveImages
@@ -155,22 +165,24 @@ class ServiceManager: ObservableObject {
     // MARK: - Whisper ASR
 
     private func initASR() {
-        guard WhisperASRService.isModelDownloaded else {
-            print("⚠️ [Whisper] 模型未下载")
+        let model = selectedASRModel
+        guard WhisperASRService.isModelDownloaded(model) else {
+            print("⚠️ [Whisper] 模型未下载: \(model.displayName)")
             return
         }
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let success = self?.whisperASRService.initialize() ?? false
+            let success = self?.whisperASRService.initialize(model: model) ?? false
             DispatchQueue.main.async {
                 self?.asrReady = success
                 if !success {
-                    self?.asrError = "Whisper 模型加载失败"
+                    self?.asrError = "\(model.shortName) 模型加载失败"
                 }
             }
         }
     }
 
     func downloadASRModel() {
+        let model = selectedASRModel
         asrDownloading = true
         asrDownloadProgress = 0
         asrDownloadDesc = "准备下载..."
@@ -194,7 +206,7 @@ class ServiceManager: ObservableObject {
                 }
             }
         }
-        whisperASRService.downloadModel()
+        whisperASRService.downloadModel(model)
     }
 
     func cancelASRDownload() {
@@ -202,6 +214,19 @@ class ServiceManager: ObservableObject {
         asrDownloading = false
         asrDownloadProgress = 0
         asrDownloadDesc = ""
+    }
+
+    /// 切换 ASR 模型：释放当前模型，加载新模型（如已下载）
+    func switchASRModel(to model: ASRModel) {
+        guard model != selectedASRModel || !asrReady else { return }
+        selectedASRModel = model
+        asrReady = false
+        asrError = nil
+        whisperASRService.release()
+
+        if WhisperASRService.isModelDownloaded(model) {
+            initASR()
+        }
     }
 
     // MARK: - 当前面板的启停（UI 按钮调用）

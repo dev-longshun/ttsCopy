@@ -182,11 +182,38 @@ struct SettingsView: View {
                                 Label("语音识别 (ASR)", systemImage: "waveform")
                                     .font(.headline)
 
+                                // 模型选择
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text("识别模型")
+                                        .font(.subheadline)
+                                        .foregroundColor(.secondary)
+                                    Picker("", selection: Binding(
+                                        get: { service.selectedASRModel },
+                                        set: { service.switchASRModel(to: $0) }
+                                    )) {
+                                        ForEach(ASRModel.allCases) { model in
+                                            Text(model.shortName).tag(model)
+                                        }
+                                    }
+                                    .pickerStyle(.segmented)
+                                    .disabled(service.asrDownloading)
+
+                                    Text(service.selectedASRModel.description)
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+
+                                Divider()
+
+                                // 当前选中模型的状态
+                                let model = service.selectedASRModel
+                                let downloaded = service.isASRModelDownloaded(model)
+
                                 if service.asrReady {
                                     HStack(spacing: 6) {
                                         Image(systemName: "checkmark.circle.fill")
                                             .foregroundColor(.green)
-                                        Text("Whisper Large V3 Turbo 已就绪")
+                                        Text("\(model.shortName) 已就绪")
                                     }
                                     if let info = service.asrModelInfo {
                                         Text(info.summary)
@@ -196,7 +223,7 @@ struct SettingsView: View {
                                 } else if service.asrDownloading {
                                     VStack(alignment: .leading, spacing: 8) {
                                         HStack {
-                                            Text("正在下载 Whisper 模型...")
+                                            Text("正在下载 \(model.shortName)...")
                                             Spacer()
                                             Text("\(Int(service.asrDownloadProgress * 100))%")
                                                 .font(.system(.body, design: .monospaced))
@@ -213,7 +240,7 @@ struct SettingsView: View {
                                         .buttonStyle(.bordered)
                                         .controlSize(.small)
                                     }
-                                } else if service.asrModelDownloaded {
+                                } else if downloaded {
                                     if let error = service.asrError {
                                         HStack(spacing: 6) {
                                             Image(systemName: "exclamationmark.triangle.fill")
@@ -227,7 +254,7 @@ struct SettingsView: View {
                                         }
                                     }
                                 } else {
-                                    Text("需要下载 Whisper Large V3 Turbo 语音识别模型。")
+                                    Text("需要下载 \(model.shortName) 语音识别模型。")
                                         .font(.caption)
                                         .foregroundColor(.secondary)
                                     if let error = service.asrError {
@@ -238,7 +265,7 @@ struct SettingsView: View {
                                     Button(action: { service.downloadASRModel() }) {
                                         HStack {
                                             Image(systemName: "arrow.down.circle")
-                                            Text("下载 Whisper Large V3 Turbo (~574 MB)")
+                                            Text("下载 \(model.shortName) (~\(model.sizeMB) MB)")
                                         }
                                     }
                                     .buttonStyle(.borderedProminent)
