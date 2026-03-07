@@ -15,8 +15,8 @@ struct MenuBarView: View {
         VStack(spacing: 0) {
             // 标题栏
             HStack {
-                Image(systemName: "message.circle.fill")
-                    .foregroundColor(.blue)
+                Image(systemName: clipboardStatusIconName)
+                    .foregroundColor(clipboardStatusColor)
                 Text("TTS Copy")
                     .font(.headline)
                 Spacer()
@@ -54,6 +54,20 @@ struct MenuBarView: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 6)
+
+            Divider()
+
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(clipboardStatusColor)
+                    .frame(width: 8, height: 8)
+                Text(clipboardStatusText)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                Spacer()
             }
             .padding(.horizontal)
             .padding(.vertical, 6)
@@ -250,6 +264,33 @@ struct MenuBarView: View {
         case .connecting: return "启动中"
         case .error: return "错误"
         case .disconnected: return "未启动"
+        }
+    }
+
+    private var clipboardStatusColor: Color {
+        switch service.clipboardProcessingState {
+        case .idle: return .blue
+        case .processing: return .orange
+        case .completed: return .green
+        case .failed: return .red
+        }
+    }
+
+    private var clipboardStatusText: String {
+        switch service.clipboardProcessingState {
+        case .idle: return "剪贴板就绪"
+        case .processing: return "原文已复制，正在优化..."
+        case .completed: return "优化完成，已覆盖剪贴板"
+        case .failed: return "处理失败，已保留原文"
+        }
+    }
+
+    private var clipboardStatusIconName: String {
+        switch service.clipboardProcessingState {
+        case .idle: return "message.circle.fill"
+        case .processing: return "arrow.triangle.2.circlepath.circle.fill"
+        case .completed: return "checkmark.circle.fill"
+        case .failed: return "exclamationmark.circle.fill"
         }
     }
 

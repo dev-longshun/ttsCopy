@@ -25,6 +25,15 @@ enum ConnectionStatus: String {
     case error = "连接错误"
 }
 
+// MARK: - Clipboard Processing State
+
+enum ClipboardProcessingState: Equatable {
+    case idle
+    case processing
+    case completed
+    case failed
+}
+
 // MARK: - Message Types
 
 enum MessageContent: Equatable {

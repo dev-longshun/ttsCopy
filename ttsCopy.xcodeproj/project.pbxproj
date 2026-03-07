@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		A1B2C3D401 /* ttsCopyApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D402 /* ttsCopyApp.swift */; };
+		D1A100000000000000000001 /* PromptOptimizerSystemPrompt.md in Resources */ = {isa = PBXBuildFile; fileRef = D1A100000000000000000002 /* PromptOptimizerSystemPrompt.md */; };
 		A1B2C3D403 /* TelegramService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D404 /* TelegramService.swift */; };
 		A1B2C3D405 /* MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D406 /* MenuBarView.swift */; };
 		A1B2C3D407 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D408 /* SettingsView.swift */; };
@@ -37,6 +38,7 @@
 		CFAA000101 /* WhisperContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhisperContext.swift; sourceTree = "<group>"; };
 		CFAA000102 /* WhisperASRService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhisperASRService.swift; sourceTree = "<group>"; };
 		CFAA000103 /* libwhisper.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libwhisper.a; path = whisper/lib/libwhisper.a; sourceTree = "<group>"; };
+		D1A100000000000000000002 /* PromptOptimizerSystemPrompt.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = PromptOptimizerSystemPrompt.md; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -73,6 +75,7 @@
 				A1B2C3D404 /* TelegramService.swift */,
 				A1B2C3D406 /* MenuBarView.swift */,
 				A1B2C3D408 /* SettingsView.swift */,
+				D1A100000000000000000002 /* PromptOptimizerSystemPrompt.md */,
 				A1B2C3D410 /* Assets.xcassets */,
 				A1B2C3D411 /* Info.plist */,
 				A1B2C3D412 /* ttsCopy.entitlements */,
@@ -155,6 +158,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A1B2C3D409 /* Assets.xcassets in Resources */,
+				D1A100000000000000000001 /* PromptOptimizerSystemPrompt.md in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -12,6 +12,7 @@ macOS 菜单栏应用，支持两种方式将消息自动复制到剪贴板：
 - 文本消息自动复制到剪贴板
 - 图片消息复制到剪贴板 + 可选自动保存到本地
 - 自动翻译（中文 → 英文，基于 Apple Translation）
+- 提示词优化（可选，基于 OpenAI 接口，处理后再写入剪贴板）
 - 收到消息时弹出系统通知
 - 消息历史记录（最近 20 条）
 
@@ -73,6 +74,14 @@ ttsCopy-lan/
 
 手机端 App 项目：[ttsCopy-mobile](../ttsCopy-mobile/)
 
+### 提示词优化
+
+1. 打开设置，开启“提示词优化（OpenAI）”
+2. 填写 `OpenAI API Key`、`Base URL` 和 `Model`
+3. 收到文本消息后，应用会先调用 OpenAI 优化提示词
+4. 如果同时开启自动翻译，会在优化后继续翻译，再写入剪贴板
+5. 优化模板放在 `ttsCopy/PromptOptimizerSystemPrompt.md`，后续可直接在项目里修改
+
 ### Telegram 模式
 
 1. 在 Telegram 中通过 @BotFather 创建 Bot，获取 Token
@@ -109,6 +118,7 @@ Bonjour 服务类型：`_ttscopy._tcp`
 | 服务发现 | Bonjour (mDNS) |
 | 网络 (Telegram) | URLSession |
 | 翻译 | Apple Translation framework |
+| 提示词优化 | OpenAI Chat Completions API |
 | 通知 | UserNotifications |
 | 剪贴板 | NSPasteboard |
 | 持久化 | UserDefaults |

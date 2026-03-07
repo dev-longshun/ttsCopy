@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import Combine
 
 @main
 struct ttsCopyApp: App {
@@ -30,10 +31,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     var panel: NSPanel?
     var eventMonitor: Any?
     let serviceManager = ServiceManager()
+    private var cancellables = Set<AnyCancellable>()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         setupMenuBar()
+        bindStatusItemAppearance()
 
         // Auto-start：根据上次的面板模式启动对应服务
         // 两个服务独立运行，这里只自动启动用户上次使用的模式
@@ -51,10 +54,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
         if let button = statusItem?.button {
-            button.image = NSImage(systemSymbolName: "message.circle", accessibilityDescription: "TTS Copy")
             button.action = #selector(togglePanel)
             button.target = self
+            button.imagePosition = .imageOnly
         }
+        updateStatusItemAppearance(for: .idle)
 
         let hostingView = NSHostingView(
             rootView: MenuBarView()
@@ -110,6 +114,41 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             NSEvent.removeMonitor(monitor)
             eventMonitor = nil
         }
+    }
+
+    private func bindStatusItemAppearance() {
+        serviceManager.$clipboardProcessingState
+            .receive(on: RunLoop.main)
+            .sink { [weak self] state in
+                self?.updateStatusItemAppearance(for: state)
+            }
+            .store(in: &cancellables)
+    }
+
+    private func updateStatusItemAppearance(for state: ClipboardProcessingState) {
+        guard let button = statusItem?.button else { return }
+
+        let symbolName: String
+        let tintColor: NSColor
+        switch state {
+        case .idle:
+            symbolName = "message.circle"
+            tintColor = .systemBlue
+        case .processing:
+            symbolName = "arrow.triangle.2.circlepath.circle.fill"
+            tintColor = .systemOrange
+        case .completed:
+            symbolName = "checkmark.circle.fill"
+            tintColor = .systemGreen
+        case .failed:
+            symbolName = "exclamationmark.circle.fill"
+            tintColor = .systemRed
+        }
+
+        let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: "TTS Copy")
+        image?.isTemplate = true
+        button.image = image
+        button.contentTintColor = tintColor
     }
 
     func applicationWillTerminate(_ notification: Notification) {

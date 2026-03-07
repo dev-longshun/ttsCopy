@@ -19,6 +19,7 @@ struct SettingsView: View {
     @State private var testResult: String = ""
     @State private var testSuccess: Bool? = nil
     @State private var isTesting: Bool = false
+    @State private var promptOptimizationTestInput: String = "帮我写一个更好的提示词，用于让 AI 帮我重构一段 SwiftUI 代码。"
 
     var body: some View {
         VStack(spacing: 0) {
@@ -289,6 +290,137 @@ struct SettingsView: View {
                                 Label("自动翻译为英文", systemImage: "character.book.closed.fill")
                             }
                             .toggleStyle(.switch)
+                            Toggle(isOn: $service.enablePromptOptimization) {
+                                Label("提示词优化（OpenAI）", systemImage: "sparkles")
+                            }
+                            .toggleStyle(.switch)
+                            if service.enablePromptOptimization {
+                                VStack(alignment: .leading, spacing: 10) {
+                                    SecureField("OpenAI API Key", text: $service.openAIAPIKey)
+                                        .textFieldStyle(.roundedBorder)
+                                        .font(.system(.body, design: .monospaced))
+                                    TextField("https://api.openai.com/v1", text: $service.openAIBaseURL)
+                                        .textFieldStyle(.roundedBorder)
+                                        .font(.system(.body, design: .monospaced))
+                                    TextField("gpt-4.1-mini", text: $service.openAIModel)
+                                        .textFieldStyle(.roundedBorder)
+                                        .font(.system(.body, design: .monospaced))
+                                    HStack(spacing: 8) {
+                                        Button(action: refreshOpenAIModels) {
+                                            HStack(spacing: 6) {
+                                                if service.isFetchingOpenAIModels {
+                                                    ProgressView().scaleEffect(0.7)
+                                                } else {
+                                                    Image(systemName: "list.bullet.rectangle")
+                                                }
+                                                Text(service.isFetchingOpenAIModels ? "检测中..." : "检测可用模型")
+                                            }
+                                        }
+                                        .buttonStyle(.bordered)
+                                        .disabled(
+                                            service.isFetchingOpenAIModels ||
+                                            service.openAIBaseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                                            service.openAIAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                        )
+
+                                        if !service.availableOpenAIModels.isEmpty {
+                                            Text("已发现 \(service.availableOpenAIModels.count) 个模型")
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                        }
+                                    }
+                                    if let error = service.openAIModelFetchError, !error.isEmpty {
+                                        Text(error)
+                                            .font(.caption)
+                                            .foregroundColor(.red)
+                                    }
+                                    if !service.availableOpenAIModels.isEmpty {
+                                        Picker("可用模型", selection: $service.openAIModel) {
+                                            ForEach(service.availableOpenAIModels, id: \.self) { model in
+                                                Text(model).tag(model)
+                                            }
+                                        }
+                                        .pickerStyle(.menu)
+
+                                        if !service.availableOpenAIModels.contains(service.openAIModel.trimmingCharacters(in: .whitespacesAndNewlines)) {
+                                            Text("当前模型不在服务返回的可用列表里，优化请求会失败。")
+                                                .font(.caption)
+                                                .foregroundColor(.orange)
+                                        }
+                                    }
+                                    Text("处理顺序：先做提示词优化，再按需翻译，最后写入剪贴板。")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                    Text("Base URL 填到根地址也可以，应用会自动走 /v1/models 和 /v1/chat/completions。")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                    Text("提示词模板文件：ttsCopy/PromptOptimizerSystemPrompt.md")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                        .textSelection(.enabled)
+                                    if service.openAIAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                        Text("未填写 API Key 时，收到消息会直接跳过提示词优化。")
+                                            .font(.caption)
+                                            .foregroundColor(.orange)
+                                    }
+
+                                    Divider()
+
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        Text("测试优化")
+                                            .font(.subheadline)
+                                            .bold()
+                                        TextEditor(text: $promptOptimizationTestInput)
+                                            .font(.system(.body, design: .default))
+                                            .frame(minHeight: 100)
+                                            .padding(6)
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 8)
+                                                    .stroke(Color.gray.opacity(0.25), lineWidth: 1)
+                                            )
+                                        HStack(spacing: 8) {
+                                            Button(action: runPromptOptimizationTest) {
+                                                HStack(spacing: 6) {
+                                                    if service.isTestingPromptOptimization {
+                                                        ProgressView().scaleEffect(0.7)
+                                                    } else {
+                                                        Image(systemName: "wand.and.stars")
+                                                    }
+                                                    Text(service.isTestingPromptOptimization ? "优化中..." : "测试优化")
+                                                }
+                                            }
+                                            .buttonStyle(.borderedProminent)
+                                            .disabled(service.isTestingPromptOptimization)
+
+                                            Button("复制结果") {
+                                                NSPasteboard.general.clearContents()
+                                                NSPasteboard.general.setString(service.promptOptimizationTestOutput, forType: .string)
+                                            }
+                                            .buttonStyle(.bordered)
+                                            .disabled(service.promptOptimizationTestOutput.isEmpty)
+                                        }
+
+                                        if let error = service.promptOptimizationTestError, !error.isEmpty {
+                                            Text(error)
+                                                .font(.caption)
+                                                .foregroundColor(.red)
+                                        }
+
+                                        if !service.promptOptimizationTestOutput.isEmpty {
+                                            ScrollView {
+                                                Text(service.promptOptimizationTestOutput)
+                                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                                    .textSelection(.enabled)
+                                                    .padding(10)
+                                            }
+                                            .frame(minHeight: 120, maxHeight: 220)
+                                            .background(Color.gray.opacity(0.08))
+                                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                                        }
+                                    }
+                                }
+                                .padding(.leading, 28)
+                            }
                             Toggle(isOn: $service.autoSaveImages) {
                                 Label("自动保存图片", systemImage: "square.and.arrow.down.fill")
                             }
@@ -364,7 +496,7 @@ struct SettingsView: View {
             }
             .padding()
         }
-        .frame(width: 400, height: 620)
+        .frame(width: 470, height: 820)
         .translationTask(service.translationConfig) { session in
             service.translationSession = session
         }
@@ -380,6 +512,14 @@ struct SettingsView: View {
             botToken = service.botToken
             if service.enableTranslation {
                 service.prepareTranslation()
+            }
+            if service.enablePromptOptimization,
+               !service.openAIBaseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+               !service.openAIAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+               service.availableOpenAIModels.isEmpty {
+                Task {
+                    await service.refreshOpenAIModels()
+                }
             }
         }
     }
@@ -421,6 +561,18 @@ struct SettingsView: View {
                 testSuccess = result.success
                 testResult = result.message
             }
+        }
+    }
+
+    private func refreshOpenAIModels() {
+        Task {
+            await service.refreshOpenAIModels()
+        }
+    }
+
+    private func runPromptOptimizationTest() {
+        Task {
+            await service.runPromptOptimizationTest(input: promptOptimizationTestInput)
         }
     }
 }

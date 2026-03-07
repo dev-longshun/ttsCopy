@@ -53,6 +53,7 @@ class ServiceManager: ObservableObject {
     }
 
     @Published var recentMessages: [MessageItem] = []
+    @Published var clipboardProcessingState: ClipboardProcessingState = .idle
 
     // MARK: - Shared Settings
 
@@ -64,6 +65,12 @@ class ServiceManager: ObservableObject {
     }
     @Published var enableTranslation: Bool {
         didSet { UserDefaults.standard.set(enableTranslation, forKey: "enableTranslation") }
+    }
+    @Published var enablePromptOptimization: Bool {
+        didSet {
+            UserDefaults.standard.set(enablePromptOptimization, forKey: "enablePromptOptimization")
+            processor.enablePromptOptimization = enablePromptOptimization
+        }
     }
     @Published var autoSaveImages: Bool {
         didSet {
@@ -77,6 +84,30 @@ class ServiceManager: ObservableObject {
             processor.imageSavePath = imageSavePath
         }
     }
+    @Published var openAIAPIKey: String {
+        didSet {
+            UserDefaults.standard.set(openAIAPIKey, forKey: "openAIAPIKey")
+            processor.openAIAPIKey = openAIAPIKey
+        }
+    }
+    @Published var openAIBaseURL: String {
+        didSet {
+            UserDefaults.standard.set(openAIBaseURL, forKey: "openAIBaseURL")
+            processor.openAIBaseURL = openAIBaseURL
+        }
+    }
+    @Published var openAIModel: String {
+        didSet {
+            UserDefaults.standard.set(openAIModel, forKey: "openAIModel")
+            processor.openAIModel = openAIModel
+        }
+    }
+    @Published var availableOpenAIModels: [String] = []
+    @Published var isFetchingOpenAIModels = false
+    @Published var openAIModelFetchError: String?
+    @Published var isTestingPromptOptimization = false
+    @Published var promptOptimizationTestOutput: String = ""
+    @Published var promptOptimizationTestError: String?
 
     // MARK: - Telegram Settings
 
@@ -110,6 +141,7 @@ class ServiceManager: ObservableObject {
     private var telegramService: TelegramService?
     private var lanService: LANService?
     private let whisperASRService = WhisperASRService()
+    private var clipboardStateResetTask: Task<Void, Never>?
 
     // MARK: - ASR State
 
@@ -140,19 +172,33 @@ class ServiceManager: ObservableObject {
         self.copyAllMessages = UserDefaults.standard.bool(forKey: "copyAllMessages")
         self.showNotification = UserDefaults.standard.object(forKey: "showNotification") as? Bool ?? true
         self.enableTranslation = UserDefaults.standard.object(forKey: "enableTranslation") as? Bool ?? false
+        self.enablePromptOptimization = UserDefaults.standard.object(forKey: "enablePromptOptimization") as? Bool ?? false
         self.autoSaveImages = UserDefaults.standard.object(forKey: "autoSaveImages") as? Bool ?? false
         self.imageSavePath = UserDefaults.standard.string(forKey: "imageSavePath")
             ?? NSSearchPathForDirectoriesInDomains(.desktopDirectory, .userDomainMask, true).first ?? ""
+        self.openAIAPIKey = UserDefaults.standard.string(forKey: "openAIAPIKey") ?? ""
+        self.openAIBaseURL = UserDefaults.standard.string(forKey: "openAIBaseURL") ?? "https://api.openai.com/v1"
+        self.openAIModel = UserDefaults.standard.string(forKey: "openAIModel") ?? "gpt-4.1-mini"
 
         let savedModel = UserDefaults.standard.string(forKey: "selectedASRModel") ?? ASRModel.whisperTurbo.rawValue
         self.selectedASRModel = ASRModel(rawValue: savedModel) ?? .whisperTurbo
 
         processor.showNotification = showNotification
+        processor.enableTranslation = enableTranslation
+        processor.enablePromptOptimization = enablePromptOptimization
         processor.autoSaveImages = autoSaveImages
         processor.imageSavePath = imageSavePath
+        processor.openAIAPIKey = openAIAPIKey
+        processor.openAIBaseURL = openAIBaseURL
+        processor.openAIModel = openAIModel
         processor.onMessageProcessed = { [weak self] item in
             Task { @MainActor in
                 self?.addMessage(item)
+            }
+        }
+        processor.onClipboardStateChange = { [weak self] state in
+            Task { @MainActor in
+                self?.updateClipboardProcessingState(state)
             }
         }
 
@@ -279,6 +325,7 @@ class ServiceManager: ObservableObject {
         service.onMessage = { [weak self] content, source, sourceDetail, senderName, messageId in
             guard let self = self else { return }
             self.processor.enableTranslation = self.enableTranslation
+            self.processor.enablePromptOptimization = self.enablePromptOptimization
             await self.processor.process(
                 content: content, source: source, sourceDetail: sourceDetail,
                 senderName: senderName, messageId: messageId
@@ -318,6 +365,7 @@ class ServiceManager: ObservableObject {
         service.onMessage = { [weak self] content, source, sourceDetail, senderName, messageId in
             guard let self = self else { return }
             self.processor.enableTranslation = self.enableTranslation
+            self.processor.enablePromptOptimization = self.enablePromptOptimization
             await self.processor.process(
                 content: content, source: source, sourceDetail: sourceDetail,
                 senderName: senderName, messageId: messageId
@@ -367,6 +415,26 @@ class ServiceManager: ObservableObject {
         }
     }
 
+    @MainActor
+    private func updateClipboardProcessingState(_ state: ClipboardProcessingState) {
+        clipboardStateResetTask?.cancel()
+        clipboardStateResetTask = nil
+        clipboardProcessingState = state
+
+        switch state {
+        case .completed, .failed:
+            clipboardStateResetTask = Task { [weak self] in
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                await MainActor.run {
+                    guard let self = self, self.clipboardProcessingState == state else { return }
+                    self.clipboardProcessingState = .idle
+                }
+            }
+        case .idle, .processing:
+            break
+        }
+    }
+
     // MARK: - Telegram Helpers
 
     func addChatId(_ id: Int64) { allowedChatIds.insert(id) }
@@ -376,6 +444,47 @@ class ServiceManager: ObservableObject {
         let service = TelegramService()
         service.botToken = botToken
         return await service.testConnection()
+    }
+
+    @MainActor
+    func refreshOpenAIModels() async {
+        isFetchingOpenAIModels = true
+        openAIModelFetchError = nil
+        processor.openAIAPIKey = openAIAPIKey
+        processor.openAIBaseURL = openAIBaseURL
+        processor.openAIModel = openAIModel
+        defer { isFetchingOpenAIModels = false }
+
+        do {
+            let models = try await processor.fetchAvailableModels()
+            availableOpenAIModels = models
+            let currentModel = openAIModel.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let firstModel = models.first,
+               currentModel.isEmpty || currentModel == "gpt-4.1-mini" || !models.contains(currentModel) {
+                openAIModel = firstModel
+            }
+        } catch {
+            availableOpenAIModels = []
+            openAIModelFetchError = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    func runPromptOptimizationTest(input: String) async {
+        isTestingPromptOptimization = true
+        promptOptimizationTestError = nil
+        promptOptimizationTestOutput = ""
+        processor.openAIAPIKey = openAIAPIKey
+        processor.openAIBaseURL = openAIBaseURL
+        processor.openAIModel = openAIModel
+        defer { isTestingPromptOptimization = false }
+
+        do {
+            let optimized = try await processor.testPromptOptimization(input)
+            promptOptimizationTestOutput = optimized
+        } catch {
+            promptOptimizationTestError = error.localizedDescription
+        }
     }
 
     // MARK: - Translation
