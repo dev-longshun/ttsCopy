@@ -7,15 +7,16 @@
 
 import SwiftUI
 import ServiceManagement
-import Translation
 
 struct SettingsView: View {
     @EnvironmentObject var service: ServiceManager
+    @EnvironmentObject var updater: UpdaterController
     @Environment(\.dismiss) var dismiss
 
     @State private var botToken: String = ""
     @State private var newChatId: String = ""
-    @State private var launchAtLogin: Bool = false
+    // 读取系统里的真实状态，避免已开启时开关仍显示为关
+    @State private var launchAtLogin: Bool = SMAppService.mainApp.status == .enabled
     @State private var testResult: String = ""
     @State private var testSuccess: Bool? = nil
     @State private var isTesting: Bool = false
@@ -39,214 +40,95 @@ struct SettingsView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    // 模式选择
+                    // Telegram 设置
                     GroupBox {
                         VStack(alignment: .leading, spacing: 12) {
-                            Label("连接模式", systemImage: "antenna.radiowaves.left.and.right")
+                            Label("Bot Token", systemImage: "key.fill")
                                 .font(.headline)
-                            Picker("", selection: $service.activeMode) {
-                                ForEach(ServiceMode.allCases) { mode in
-                                    Text(mode.rawValue).tag(mode)
+                            TextField("输入你的 Bot Token", text: $botToken)
+                                .textFieldStyle(.roundedBorder)
+                                .font(.system(.body, design: .monospaced))
+                            Text("从 @BotFather 获取的 Token")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            HStack {
+                                Button(action: testConnection) {
+                                    HStack {
+                                        if isTesting {
+                                            ProgressView().scaleEffect(0.7)
+                                        } else {
+                                            Image(systemName: "network")
+                                        }
+                                        Text(isTesting ? "测试中..." : "测试连接")
+                                    }
+                                }
+                                .buttonStyle(.bordered)
+                                .disabled(botToken.isEmpty || isTesting)
+                                Spacer()
+                                if let success = testSuccess {
+                                    Image(systemName: success ? "checkmark.circle.fill" : "xmark.circle.fill")
+                                        .foregroundColor(success ? .green : .red)
                                 }
                             }
-                            .pickerStyle(.segmented)
+                            if !testResult.isEmpty {
+                                Text(testResult)
+                                    .font(.caption)
+                                    .foregroundColor(testSuccess == true ? .green : .red)
+                                    .padding(8)
+                                    .background(Color.gray.opacity(0.1))
+                                    .cornerRadius(4)
+                            }
                         }
                         .padding(.vertical, 8)
                     }
 
-                    // Telegram 设置
-                    if service.activeMode == .telegram {
-                        GroupBox {
-                            VStack(alignment: .leading, spacing: 12) {
-                                Label("Bot Token", systemImage: "key.fill")
-                                    .font(.headline)
-                                TextField("输入你的 Bot Token", text: $botToken)
-                                    .textFieldStyle(.roundedBorder)
-                                    .font(.system(.body, design: .monospaced))
-                                Text("从 @BotFather 获取的 Token")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
+                    // Chat ID 设置
+                    GroupBox {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Label("允许的群组/聊天", systemImage: "person.2.fill")
+                                .font(.headline)
+                            Toggle("接收所有消息（不过滤）", isOn: $service.copyAllMessages)
+                                .toggleStyle(.switch)
+                            if !service.copyAllMessages {
+                                Divider()
                                 HStack {
-                                    Button(action: testConnection) {
-                                        HStack {
-                                            if isTesting {
-                                                ProgressView().scaleEffect(0.7)
-                                            } else {
-                                                Image(systemName: "network")
-                                            }
-                                            Text(isTesting ? "测试中..." : "测试连接")
+                                    TextField("输入 Chat ID", text: $newChatId)
+                                        .textFieldStyle(.roundedBorder)
+                                    Button("添加") {
+                                        if let chatId = Int64(newChatId.trimmingCharacters(in: .whitespaces)) {
+                                            service.addChatId(chatId)
+                                            newChatId = ""
                                         }
                                     }
-                                    .buttonStyle(.bordered)
-                                    .disabled(botToken.isEmpty || isTesting)
-                                    Spacer()
-                                    if let success = testSuccess {
-                                        Image(systemName: success ? "checkmark.circle.fill" : "xmark.circle.fill")
-                                            .foregroundColor(success ? .green : .red)
-                                    }
+                                    .disabled(Int64(newChatId.trimmingCharacters(in: .whitespaces)) == nil)
                                 }
-                                if !testResult.isEmpty {
-                                    Text(testResult)
+                                if service.allowedChatIds.isEmpty {
+                                    Text("暂未添加任何 Chat ID")
                                         .font(.caption)
-                                        .foregroundColor(testSuccess == true ? .green : .red)
-                                        .padding(8)
-                                        .background(Color.gray.opacity(0.1))
-                                        .cornerRadius(4)
-                                }
-                            }
-                            .padding(.vertical, 8)
-                        }
-
-                        // Chat ID 设置
-                        GroupBox {
-                            VStack(alignment: .leading, spacing: 12) {
-                                Label("允许的群组/聊天", systemImage: "person.2.fill")
-                                    .font(.headline)
-                                Toggle("接收所有消息（不过滤）", isOn: $service.copyAllMessages)
-                                    .toggleStyle(.switch)
-                                if !service.copyAllMessages {
-                                    Divider()
-                                    HStack {
-                                        TextField("输入 Chat ID", text: $newChatId)
-                                            .textFieldStyle(.roundedBorder)
-                                        Button("添加") {
-                                            if let chatId = Int64(newChatId.trimmingCharacters(in: .whitespaces)) {
-                                                service.addChatId(chatId)
-                                                newChatId = ""
-                                            }
-                                        }
-                                        .disabled(Int64(newChatId.trimmingCharacters(in: .whitespaces)) == nil)
-                                    }
-                                    if service.allowedChatIds.isEmpty {
-                                        Text("暂未添加任何 Chat ID")
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                            .padding(.vertical, 8)
-                                    } else {
-                                        VStack(spacing: 4) {
-                                            ForEach(Array(service.allowedChatIds).sorted(), id: \.self) { chatId in
-                                                HStack {
-                                                    Text("\(chatId)")
-                                                        .font(.system(.body, design: .monospaced))
-                                                    Spacer()
-                                                    Button(action: { service.removeChatId(chatId) }) {
-                                                        Image(systemName: "trash").foregroundColor(.red)
-                                                    }
-                                                    .buttonStyle(.plain)
+                                        .foregroundColor(.secondary)
+                                        .padding(.vertical, 8)
+                                } else {
+                                    VStack(spacing: 4) {
+                                        ForEach(Array(service.allowedChatIds).sorted(), id: \.self) { chatId in
+                                            HStack {
+                                                Text("\(chatId)")
+                                                    .font(.system(.body, design: .monospaced))
+                                                Spacer()
+                                                Button(action: { service.removeChatId(chatId) }) {
+                                                    Image(systemName: "trash").foregroundColor(.red)
                                                 }
-                                                .padding(.vertical, 4)
-                                                .padding(.horizontal, 8)
-                                                .background(Color.gray.opacity(0.1))
-                                                .cornerRadius(4)
+                                                .buttonStyle(.plain)
                                             }
+                                            .padding(.vertical, 4)
+                                            .padding(.horizontal, 8)
+                                            .background(Color.gray.opacity(0.1))
+                                            .cornerRadius(4)
                                         }
                                     }
                                 }
                             }
-                            .padding(.vertical, 8)
                         }
-                    }
-
-                    // LAN 设置
-                    if service.activeMode == .lan {
-                        GroupBox {
-                            VStack(alignment: .leading, spacing: 12) {
-                                Label("局域网模式", systemImage: "wifi")
-                                    .font(.headline)
-                                Text("Mac 会启动 WebSocket 服务器，手机端 App 通过 Bonjour 自动发现并连接。")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                if service.isActive {
-                                    HStack {
-                                        Text("服务器地址:")
-                                        Text("\(service.localIPAddress):\(service.lanPort)")
-                                            .font(.system(.body, design: .monospaced))
-                                            .textSelection(.enabled)
-                                    }
-                                    HStack {
-                                        Text("已连接设备:")
-                                        Text("\(service.lanConnectedDevices.count)")
-                                    }
-                                } else {
-                                    Text("点击「启动服务」开始")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                            }
-                            .padding(.vertical, 8)
-                        }
-
-                        // 语音识别
-                        GroupBox {
-                            VStack(alignment: .leading, spacing: 12) {
-                                Label("语音识别 (ASR)", systemImage: "waveform")
-                                    .font(.headline)
-
-                                if service.asrReady {
-                                    HStack(spacing: 6) {
-                                        Image(systemName: "checkmark.circle.fill")
-                                            .foregroundColor(.green)
-                                        Text("Whisper Large V3 Turbo 已就绪")
-                                    }
-                                    if let info = service.asrModelInfo {
-                                        Text(info.summary)
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                    }
-                                } else if service.asrDownloading {
-                                    VStack(alignment: .leading, spacing: 8) {
-                                        HStack {
-                                            Text("正在下载 Whisper 模型...")
-                                            Spacer()
-                                            Text("\(Int(service.asrDownloadProgress * 100))%")
-                                                .font(.system(.body, design: .monospaced))
-                                        }
-                                        ProgressView(value: service.asrDownloadProgress)
-                                        if !service.asrDownloadDesc.isEmpty {
-                                            Text(service.asrDownloadDesc)
-                                                .font(.caption)
-                                                .foregroundColor(.secondary)
-                                        }
-                                        Button("取消下载") {
-                                            service.cancelASRDownload()
-                                        }
-                                        .buttonStyle(.bordered)
-                                        .controlSize(.small)
-                                    }
-                                } else if service.asrModelDownloaded {
-                                    if let error = service.asrError {
-                                        HStack(spacing: 6) {
-                                            Image(systemName: "exclamationmark.triangle.fill")
-                                                .foregroundColor(.orange)
-                                            Text(error)
-                                        }
-                                    } else {
-                                        HStack(spacing: 6) {
-                                            ProgressView().scaleEffect(0.7)
-                                            Text("模型加载中...")
-                                        }
-                                    }
-                                } else {
-                                    Text("需要下载 Whisper Large V3 Turbo 语音识别模型。")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                    if let error = service.asrError {
-                                        Text(error)
-                                            .font(.caption)
-                                            .foregroundColor(.red)
-                                    }
-                                    Button(action: { service.downloadASRModel() }) {
-                                        HStack {
-                                            Image(systemName: "arrow.down.circle")
-                                            Text("下载 Whisper Large V3 Turbo (~574 MB)")
-                                        }
-                                    }
-                                    .buttonStyle(.borderedProminent)
-                                    .controlSize(.small)
-                                }
-                            }
-                            .padding(.vertical, 8)
-                        }
+                        .padding(.vertical, 8)
                     }
 
                     // 消息处理
@@ -256,10 +138,6 @@ struct SettingsView: View {
                                 .font(.headline)
                             Toggle(isOn: $service.showNotification) {
                                 Label("收到消息时显示通知", systemImage: "bell.fill")
-                            }
-                            .toggleStyle(.switch)
-                            Toggle(isOn: $service.enableTranslation) {
-                                Label("自动翻译为英文", systemImage: "character.book.closed.fill")
                             }
                             .toggleStyle(.switch)
                             Toggle(isOn: $service.autoSaveImages) {
@@ -285,6 +163,42 @@ struct SettingsView: View {
                         .padding(.vertical, 8)
                     }
 
+                    // 软件更新
+                    GroupBox {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Label("软件更新", systemImage: "arrow.down.circle")
+                                .font(.headline)
+                            HStack {
+                                Text("当前版本")
+                                Spacer()
+                                Text("v\(UpdaterController.currentVersionString())")
+                                    .font(.system(.body, design: .monospaced))
+                                    .foregroundColor(.secondary)
+                            }
+                            Toggle("自动检查更新", isOn: $updater.automaticallyChecksForUpdates)
+                                .toggleStyle(.switch)
+                            HStack(spacing: 8) {
+                                Button("检查更新") { updater.checkForUpdates() }
+                                    .buttonStyle(.bordered)
+                                    .disabled(!updater.canCheckForUpdates)
+                                if updater.phase == .available || (updater.phase == .failed && updater.availableVersion != nil) {
+                                    Button("更新并重启") { updater.installAndRelaunch() }
+                                        .buttonStyle(.borderedProminent)
+                                }
+                                if updater.phase == .checking || updater.phase == .downloading || updater.phase == .installing {
+                                    ProgressView().scaleEffect(0.7)
+                                }
+                                Spacer()
+                            }
+                            if !updater.statusMessage.isEmpty {
+                                Text(updater.statusMessage)
+                                    .font(.caption)
+                                    .foregroundColor(updater.phase == .failed ? .red : .secondary)
+                            }
+                        }
+                        .padding(.vertical, 8)
+                    }
+
                     // 其他设置
                     GroupBox {
                         VStack(alignment: .leading, spacing: 12) {
@@ -305,13 +219,8 @@ struct SettingsView: View {
                             Label("使用说明", systemImage: "questionmark.circle")
                                 .font(.headline)
                             VStack(alignment: .leading, spacing: 4) {
-                                if service.activeMode == .telegram {
-                                    BulletPoint("配置 Bot Token 后点击「开始监听」")
-                                    BulletPoint("在手机上给 Bot 或群组发送消息")
-                                } else {
-                                    BulletPoint("点击「启动服务」开启局域网服务器")
-                                    BulletPoint("手机端 App 会自动发现并连接")
-                                }
+                                BulletPoint("配置 Bot Token 后点击「开始监听」")
+                                BulletPoint("在手机上给 Bot 或群组发送消息")
                                 BulletPoint("消息会自动复制到 Mac 剪贴板")
                             }
                             .font(.caption)
@@ -328,32 +237,16 @@ struct SettingsView: View {
             HStack {
                 Spacer()
                 Button("保存") {
-                    if service.activeMode == .telegram {
-                        service.botToken = botToken
-                    }
+                    service.botToken = botToken
                     dismiss()
                 }
                 .buttonStyle(.borderedProminent)
             }
             .padding()
         }
-        .frame(width: 400, height: 620)
-        .translationTask(service.translationConfig) { session in
-            service.translationSession = session
-        }
-        .onChange(of: service.enableTranslation) {
-            if service.enableTranslation {
-                service.prepareTranslation()
-            } else {
-                service.translationSession = nil
-                service.translationConfig = nil
-            }
-        }
+        .frame(width: 470, height: 820)
         .onAppear {
             botToken = service.botToken
-            if service.enableTranslation {
-                service.prepareTranslation()
-            }
         }
     }
 
@@ -412,4 +305,5 @@ struct BulletPoint: View {
 #Preview {
     SettingsView()
         .environmentObject(ServiceManager())
+        .environmentObject(UpdaterController())
 }

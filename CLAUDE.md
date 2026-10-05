@@ -12,13 +12,9 @@
 
 ## 项目概要
 
-ttsCopy — macOS 菜单栏应用，双模式接收消息并复制到剪贴板：
-- Telegram 模式：Bot API 长轮询
-- LAN 模式：WebSocket 服务器 + Bonjour 广播，配合手机端 App
+ttsCopy — macOS 菜单栏应用，监听 Telegram Bot 消息（Bot API 长轮询）并复制到剪贴板。
 
-技术栈：SwiftUI / Swift async-await / Network.framework / macOS 15+
-
-当前分支：`feature/lan-mode`
+技术栈：SwiftUI / Swift async-await / URLSession / macOS 15+
 
 ## 关键约束
 
@@ -28,6 +24,7 @@ ttsCopy — macOS 菜单栏应用，双模式接收消息并复制到剪贴板�
 - 禁止 `rm` 删除文件，必须用 `trash` 命令
 - `git commit` 流程：先输出 commit 信息供用户审核，用户确认后再执行提交，提交内容必须与展示内容完全一致，禁止附加任何辅助编程标识信息（如 Co-Authored-By 等）
 - 禁止使用 Markdown 表格，用列表替代
+- `git worktree` 规范：新建 worktree 时，必须将工作树创建在项目同级目录下，目录名格式为 `{项目名}--{分支名}`（分支名中的 `/` 替换为 `-`）。例如项目为 `ttsCopy`，分支为 `feat/login`，则 worktree 路径为 `../ttsCopy--feat-login/`。禁止使用默认的 `.git/worktrees` 或项目内部路径
 - 开发完成后必须输出新增/修改文件清单
 
 ## 文件结构
@@ -35,10 +32,10 @@ ttsCopy — macOS 菜单栏应用，双模式接收消息并复制到剪贴板�
 核心代码在 `ttsCopy/` 目录：
 - `ttsCopyApp.swift` — App 入口
 - `ServiceManager.swift` — 统一服务管理
-- `TelegramService.swift` — Telegram 传输层
-- `LANService.swift` — WebSocket + Bonjour
-- `MessageProcessor.swift` — 消息处理
+- `TelegramService.swift` — Telegram 传输层（长轮询 / 409 冲突检测）
+- `MessageProcessor.swift` — 消息处理（剪贴板 / 通知 / 图片保存）
 - `MessageTypes.swift` — 共享类型
+- `UpdaterController.swift` — 应用内更新
 - `MenuBarView.swift` / `SettingsView.swift` — UI
 
 详细架构见 `DEVELOPMENT.md`。

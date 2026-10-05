@@ -2,32 +2,25 @@
 //  MessageProcessor.swift
 //  ttsCopy
 //
-//  消息处理逻辑：剪贴板、通知、翻译、图片保存
+//  消息处理逻辑：剪贴板、通知、图片保存
 //
 
 import Foundation
 import AppKit
 import UserNotifications
-import Translation
 
 class MessageProcessor {
 
     var showNotification: Bool = true
-    var enableTranslation: Bool = false
     var autoSaveImages: Bool = false
     var imageSavePath: String = ""
 
-    /// 由 SwiftUI .translationTask 提供的翻译 session
-    var translationSession: TranslationSession?
-
-    /// 消息处理完成回调
     var onMessageProcessed: ((MessageItem) -> Void)?
+    var onClipboardStateChange: ((ClipboardProcessingState) -> Void)?
 
     init() {
         requestNotificationPermission()
     }
-
-    // MARK: - 处理入口
 
     @MainActor
     func process(
@@ -39,54 +32,39 @@ class MessageProcessor {
     ) async {
         switch content {
         case .text(let text):
-            let textToCopy = enableTranslation ? await translateText(text) : text
             let item = MessageItem(
                 id: messageId, content: .text(text),
                 source: source, sourceDetail: sourceDetail,
                 senderName: senderName, timestamp: Date()
             )
             onMessageProcessed?(item)
-            copyToClipboard(textToCopy)
+
+            copyToClipboard(text)
+            onClipboardStateChange?(.completed)
+
             if showNotification {
                 sendNotification(title: sourceDetail ?? source, body: text)
             }
 
         case .photo(let data, let caption):
-            let translatedCaption: String?
-            if enableTranslation, let cap = caption, !cap.isEmpty {
-                translatedCaption = await translateText(cap)
-            } else {
-                translatedCaption = caption
-            }
             let item = MessageItem(
                 id: messageId, content: .photo(data, caption: caption),
                 source: source, sourceDetail: sourceDetail,
                 senderName: senderName, timestamp: Date()
             )
             onMessageProcessed?(item)
-            copyImageToClipboard(data, caption: translatedCaption)
+
+            copyImageToClipboard(data, caption: caption)
             if autoSaveImages {
-                saveImageToFile(data, caption: translatedCaption)
+                saveImageToFile(data, caption: caption)
             }
+            onClipboardStateChange?(.completed)
+
             if showNotification {
                 sendNotification(title: sourceDetail ?? source, body: caption ?? "[图片]")
             }
         }
     }
-
-    // MARK: - Translation
-
-    func translateText(_ text: String) async -> String {
-        guard let session = translationSession else { return text }
-        do {
-            let response = try await session.translate(text)
-            return response.targetText
-        } catch {
-            return text
-        }
-    }
-
-    // MARK: - Clipboard
 
     private func copyToClipboard(_ text: String) {
         let pasteboard = NSPasteboard.general
@@ -106,8 +84,6 @@ class MessageProcessor {
             print("   ✅ 图片已复制到剪贴板")
         }
     }
-
-    // MARK: - Image Save
 
     private func saveImageToFile(_ imageData: Data, caption: String?) {
         guard !imageSavePath.isEmpty else { return }
@@ -130,15 +106,13 @@ class MessageProcessor {
         }
     }
 
-    // MARK: - Notification
-
     private func requestNotificationPermission() {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, error in
             if let error = error { print("通知权限请求失败: \(error)") }
         }
     }
 
-    private func sendNotification(title: String, body: String) {
+    func sendNotification(title: String, body: String) {
         let content = UNMutableNotificationContent()
         content.title = "TTS Copy - \(title)"
         content.body = body

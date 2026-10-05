@@ -9,14 +9,15 @@ import SwiftUI
 
 struct MenuBarView: View {
     @EnvironmentObject var service: ServiceManager
+    @EnvironmentObject var updater: UpdaterController
     @State private var showingSettings = false
 
     var body: some View {
         VStack(spacing: 0) {
             // 标题栏
             HStack {
-                Image(systemName: "message.circle.fill")
-                    .foregroundColor(.blue)
+                Image(systemName: clipboardStatusIconName)
+                    .foregroundColor(clipboardStatusColor)
                 Text("TTS Copy")
                     .font(.headline)
                 Spacer()
@@ -31,105 +32,66 @@ struct MenuBarView: View {
 
             Divider()
 
-            // 双服务状态栏
-            HStack(spacing: 16) {
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(telegramStatusColor)
-                        .frame(width: 7, height: 7)
-                    Text("Telegram")
-                        .font(.caption)
-                    Text(telegramStatusText)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
+            // 新版本提示
+            if updater.showsUpdateBadge {
+                UpdateBanner()
+                Divider()
+            }
+
+            // Telegram 状态栏
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(telegramStatusColor)
+                    .frame(width: 7, height: 7)
+                Text("Telegram")
+                    .font(.caption)
+                Text(telegramStatusText)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
                 Spacer()
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(lanStatusColor)
-                        .frame(width: 7, height: 7)
-                    Text("LAN")
-                        .font(.caption)
-                    Text(lanStatusText)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
             }
             .padding(.horizontal)
             .padding(.vertical, 6)
 
             Divider()
 
-            // 模式切换
-            Picker("", selection: $service.activeMode) {
-                ForEach(ServiceMode.allCases) { mode in
-                    Text(mode.rawValue).tag(mode)
-                }
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(clipboardStatusColor)
+                    .frame(width: 8, height: 8)
+                Text(clipboardStatusText)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                Spacer()
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
             .padding(.horizontal)
-            .padding(.vertical, 8)
+            .padding(.vertical, 6)
+
+            Divider()
 
             // 控制按钮
             HStack(spacing: 12) {
                 Button(action: {
-                    if service.isActive {
-                        service.stopCurrentMode()
+                    if service.telegramActive {
+                        service.stopTelegram()
                     } else {
-                        service.startCurrentMode()
+                        service.startTelegram()
                     }
                 }) {
                     HStack {
-                        Image(systemName: service.isActive ? "stop.fill" : "play.fill")
-                        Text(buttonLabel)
+                        Image(systemName: service.telegramActive ? "stop.fill" : "play.fill")
+                        Text(service.telegramActive ? "停止监听" : "开始监听")
                     }
                     .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
-                .tint(service.isActive ? .red : .green)
+                .tint(service.telegramActive ? .red : .green)
             }
             .padding()
 
-            // LAN 状态信息
-            if service.activeMode == .lan && service.isActive {
-                GroupBox {
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack {
-                            Text("IP 地址")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                            Spacer()
-                            Text(service.localIPAddress)
-                                .font(.system(.caption, design: .monospaced))
-                                .textSelection(.enabled)
-                        }
-                        HStack {
-                            Text("端口号")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                            Spacer()
-                            Text(String(service.lanPort))
-                                .font(.system(.caption, design: .monospaced))
-                                .textSelection(.enabled)
-                        }
-                        HStack {
-                            Text("已连接设备")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                            Spacer()
-                            Text("\(service.lanConnectedDevices.count)")
-                                .font(.caption)
-                        }
-                    }
-                }
-                .padding(.horizontal)
-                .padding(.bottom, 8)
-            }
-
             // 错误信息
-            if let error = service.lastError {
+            if let error = service.telegramError {
                 HStack {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundColor(.orange)
@@ -139,6 +101,18 @@ struct MenuBarView: View {
                 }
                 .padding(.horizontal)
                 .padding(.bottom, 8)
+            }
+
+            // Telegram 被另一台设备占用
+            if service.telegramConflict {
+                Button(action: { service.takeOverTelegram() }) {
+                    Label("在本机接管", systemImage: "arrow.uturn.down.circle")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .padding(.horizontal)
+                .padding(.bottom, 8)
+                .help("在本机重新开始监听，另一台设备会被挤掉")
             }
 
             Divider()
@@ -192,7 +166,7 @@ struct MenuBarView: View {
                     .buttonStyle(.plain)
                     .foregroundColor(.red)
                 Spacer()
-                Text("v1.1")
+                Text("v\(UpdaterController.currentVersionString())")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -204,18 +178,11 @@ struct MenuBarView: View {
         .sheet(isPresented: $showingSettings) {
             SettingsView()
                 .environmentObject(service)
+                .environmentObject(updater)
         }
     }
 
-    private var buttonLabel: String {
-        if service.isActive {
-            return service.activeMode == .telegram ? "停止监听" : "停止服务"
-        } else {
-            return service.activeMode == .telegram ? "开始监听" : "启动服务"
-        }
-    }
-
-    // MARK: - 双服务状态
+    // MARK: - Telegram 状态
 
     private var telegramStatusColor: Color {
         switch service.telegramStatus {
@@ -227,6 +194,7 @@ struct MenuBarView: View {
     }
 
     private var telegramStatusText: String {
+        if service.telegramConflict { return "被占用" }
         switch service.telegramStatus {
         case .connected: return "监听中"
         case .connecting: return "连接中"
@@ -235,24 +203,98 @@ struct MenuBarView: View {
         }
     }
 
-    private var lanStatusColor: Color {
-        switch service.lanStatus {
-        case .connected: return .green
-        case .connecting: return .yellow
-        case .error: return .red
-        case .disconnected: return .gray
+    private var clipboardStatusColor: Color {
+        switch service.clipboardProcessingState {
+        case .idle: return .blue
+        case .completed: return .green
         }
     }
 
-    private var lanStatusText: String {
-        switch service.lanStatus {
-        case .connected: return "运行中"
-        case .connecting: return "启动中"
-        case .error: return "错误"
-        case .disconnected: return "未启动"
+    private var clipboardStatusText: String {
+        switch service.clipboardProcessingState {
+        case .idle: return "剪贴板就绪"
+        case .completed: return "已复制到剪贴板"
         }
     }
 
+    private var clipboardStatusIconName: String {
+        switch service.clipboardProcessingState {
+        case .idle: return "message.circle.fill"
+        case .completed: return "checkmark.circle.fill"
+        }
+    }
+
+}
+
+// MARK: - 更新横幅
+
+struct UpdateBanner: View {
+    @EnvironmentObject var updater: UpdaterController
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Image(systemName: "arrow.down.circle.fill")
+                    .foregroundColor(.accentColor)
+                Text(title)
+                    .font(.callout)
+                Spacer()
+                actionButton
+            }
+            if updater.phase == .downloading {
+                ProgressView(value: updater.downloadProgress)
+                    .controlSize(.small)
+            }
+            if updater.phase == .failed, !updater.statusMessage.isEmpty {
+                Text(updater.statusMessage)
+                    .font(.caption)
+                    .foregroundColor(.red)
+                    .lineLimit(2)
+            }
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+        .background(Color.accentColor.opacity(0.08))
+    }
+
+    private var title: String {
+        let version = updater.availableVersion.map { "v\($0)" } ?? ""
+        switch updater.phase {
+        case .downloading:
+            return "正在下载 \(version)… \(Int(updater.downloadProgress * 100))%"
+        case .installing:
+            return updater.statusMessage
+        case .readyToInstall:
+            return "新版本已就绪"
+        case .failed:
+            return "更新失败"
+        default:
+            return "发现新版本 \(version)"
+        }
+    }
+
+    @ViewBuilder
+    private var actionButton: some View {
+        switch updater.phase {
+        case .available:
+            Button("更新并重启") { updater.installAndRelaunch() }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+        case .failed:
+            Button("重试") { updater.installAndRelaunch() }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+        case .readyToInstall:
+            Button("退出并安装") { updater.quitToFinishInstall() }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+        case .downloading, .installing:
+            ProgressView()
+                .controlSize(.small)
+        default:
+            EmptyView()
+        }
+    }
 }
 
 struct MessageRow: View {
@@ -346,4 +388,5 @@ struct VisualEffectView: NSViewRepresentable {
 #Preview {
     MenuBarView()
         .environmentObject(ServiceManager())
+        .environmentObject(UpdaterController())
 }

@@ -2,10 +2,11 @@
 //  ttsCopyApp.swift
 //  ttsCopy
 //
-//  TTS Copy - 自动复制消息到剪贴板（支持 Telegram / 局域网模式）
+//  TTS Copy - 自动复制 Telegram 消息到剪贴板
 //
 
 import SwiftUI
+import Combine
 
 @main
 struct ttsCopyApp: App {
@@ -15,6 +16,7 @@ struct ttsCopyApp: App {
         Settings {
             SettingsView()
                 .environmentObject(appDelegate.serviceManager)
+                .environmentObject(appDelegate.updater)
         }
     }
 }
@@ -25,25 +27,27 @@ class KeyablePanel: NSPanel {
     override var canBecomeKey: Bool { true }
 }
 
+@MainActor
 class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     var statusItem: NSStatusItem?
     var panel: NSPanel?
     var eventMonitor: Any?
     let serviceManager = ServiceManager()
+    lazy var updater = UpdaterController()
+    private var cancellables = Set<AnyCancellable>()
+    /// 菜单栏图标右上角的更新红点
+    private var updateBadgeView: NSView?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         setupMenuBar()
+        bindStatusItemAppearance()
+        bindUpdateBadge()
+        updater.startDeferred()
 
-        // Auto-start：根据上次的面板模式启动对应服务
-        // 两个服务独立运行，这里只自动启动用户上次使用的模式
-        switch serviceManager.activeMode {
-        case .telegram:
-            if !serviceManager.botToken.isEmpty {
-                serviceManager.startCurrentMode()
-            }
-        case .lan:
-            serviceManager.startCurrentMode()
+        // Auto-start：已配置 Bot Token 时自动开始监听
+        if !serviceManager.botToken.isEmpty {
+            serviceManager.startTelegram()
         }
     }
 
@@ -51,14 +55,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
         if let button = statusItem?.button {
-            button.image = NSImage(systemSymbolName: "message.circle", accessibilityDescription: "TTS Copy")
             button.action = #selector(togglePanel)
             button.target = self
+            button.imagePosition = .imageOnly
         }
+        updateStatusItemAppearance(for: .idle)
 
         let hostingView = NSHostingView(
             rootView: MenuBarView()
                 .environmentObject(serviceManager)
+                .environmentObject(updater)
         )
         hostingView.setFrameSize(NSSize(width: 320, height: 480))
 
@@ -97,6 +103,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             panel.setFrameOrigin(NSPoint(x: x, y: y))
             panel.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
+            updater.panelDidOpen()
 
             eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
                 self?.closePanel()
@@ -112,8 +119,74 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         }
     }
 
+    private func bindStatusItemAppearance() {
+        serviceManager.$clipboardProcessingState
+            .receive(on: RunLoop.main)
+            .sink { [weak self] state in
+                self?.updateStatusItemAppearance(for: state)
+            }
+            .store(in: &cancellables)
+    }
+
+    private func updateStatusItemAppearance(for state: ClipboardProcessingState) {
+        guard let button = statusItem?.button else { return }
+
+        let symbolName: String
+        let tintColor: NSColor
+        switch state {
+        case .idle:
+            symbolName = "message.circle"
+            tintColor = .systemBlue
+        case .completed:
+            symbolName = "checkmark.circle.fill"
+            tintColor = .systemGreen
+        }
+
+        let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: "TTS Copy")
+        image?.isTemplate = true
+        button.image = image
+        button.contentTintColor = tintColor
+    }
+
+    // MARK: - 更新红点
+
+    private func bindUpdateBadge() {
+        updater.$phase
+            .combineLatest(updater.$availableVersion)
+            .map { UpdaterController.badgeVisible(phase: $0, availableVersion: $1) }
+            .removeDuplicates()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] visible in
+                self?.setUpdateBadgeVisible(visible)
+            }
+            .store(in: &cancellables)
+    }
+
+    private func setUpdateBadgeVisible(_ visible: Bool) {
+        guard let button = statusItem?.button else { return }
+        if !visible {
+            updateBadgeView?.removeFromSuperview()
+            updateBadgeView = nil
+            return
+        }
+        guard updateBadgeView == nil else { return }
+
+        let size: CGFloat = 6
+        let dot = NSView(frame: NSRect(
+            x: button.bounds.maxX - size - 2,
+            y: button.isFlipped ? 3 : button.bounds.maxY - size - 3,
+            width: size,
+            height: size
+        ))
+        dot.wantsLayer = true
+        dot.layer?.backgroundColor = NSColor.systemRed.cgColor
+        dot.layer?.cornerRadius = size / 2
+        dot.autoresizingMask = button.isFlipped ? [.minXMargin, .maxYMargin] : [.minXMargin, .minYMargin]
+        button.addSubview(dot)
+        updateBadgeView = dot
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         serviceManager.stopTelegram()
-        serviceManager.stopLAN()
     }
 }

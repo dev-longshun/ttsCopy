@@ -3,56 +3,24 @@
 //  ttsCopy
 //
 //  统一服务管理，作为 UI 的 @EnvironmentObject
-//  支持 Telegram 和 LAN 双服务独立并行运行
+//  管理 Telegram 监听的生命周期与设置持久化
 //
 
 import Foundation
 import SwiftUI
-import Translation
 
 class ServiceManager: ObservableObject {
 
-    // MARK: - 当前查看的面板（不影响服务运行状态）
-
-    @Published var activeMode: ServiceMode {
-        didSet {
-            UserDefaults.standard.set(activeMode.rawValue, forKey: "serviceMode")
-        }
-    }
-
-    // MARK: - 双服务独立状态
+    // MARK: - Telegram 状态
 
     @Published var telegramActive = false
     @Published var telegramStatus: ConnectionStatus = .disconnected
     @Published var telegramError: String?
-
-    @Published var lanActive = false
-    @Published var lanStatus: ConnectionStatus = .disconnected
-    @Published var lanError: String?
-
-    // 兼容 UI：根据当前面板返回对应服务的状态
-    var isActive: Bool {
-        switch activeMode {
-        case .telegram: return telegramActive
-        case .lan: return lanActive
-        }
-    }
-
-    var connectionStatus: ConnectionStatus {
-        switch activeMode {
-        case .telegram: return telegramStatus
-        case .lan: return lanStatus
-        }
-    }
-
-    var lastError: String? {
-        switch activeMode {
-        case .telegram: return telegramError
-        case .lan: return lanError
-        }
-    }
+    /// 同一个 Bot 被另一台设备占用（Telegram 409），本机已停止监听
+    @Published var telegramConflict = false
 
     @Published var recentMessages: [MessageItem] = []
+    @Published var clipboardProcessingState: ClipboardProcessingState = .idle
 
     // MARK: - Shared Settings
 
@@ -61,9 +29,6 @@ class ServiceManager: ObservableObject {
             UserDefaults.standard.set(showNotification, forKey: "showNotification")
             processor.showNotification = showNotification
         }
-    }
-    @Published var enableTranslation: Bool {
-        didSet { UserDefaults.standard.set(enableTranslation, forKey: "enableTranslation") }
     }
     @Published var autoSaveImages: Bool {
         didSet {
@@ -90,49 +55,20 @@ class ServiceManager: ObservableObject {
         didSet { UserDefaults.standard.set(copyAllMessages, forKey: "copyAllMessages") }
     }
 
-    // MARK: - LAN Settings
-
-    @Published var lanPort: UInt16 = 0
-    @Published var lanConnectedDevices: [String] = []
-    @Published var localIPAddress: String = ""
-
-    // MARK: - Translation
-
-    var translationSession: TranslationSession? {
-        get { processor.translationSession }
-        set { processor.translationSession = newValue }
-    }
-    @Published var translationConfig: TranslationSession.Configuration?
-
     // MARK: - Internal
 
     let processor = MessageProcessor()
     private var telegramService: TelegramService?
-    private var lanService: LANService?
-    private let whisperASRService = WhisperASRService()
-
-    // MARK: - ASR State
-
-    @Published var asrReady = false
-    @Published var asrDownloading = false
-    @Published var asrDownloadProgress: Double = 0
-    @Published var asrDownloadDesc: String = ""
-    @Published var asrError: String?
-
-    var asrModelDownloaded: Bool { WhisperASRService.isModelDownloaded }
-    var asrModelInfo: WhisperASRService.ModelInfo? { whisperASRService.modelInfo }
+    private var clipboardStateResetTask: Task<Void, Never>?
 
     // MARK: - Init
 
     init() {
-        let modeString = UserDefaults.standard.string(forKey: "serviceMode") ?? ServiceMode.telegram.rawValue
-        self.activeMode = ServiceMode(rawValue: modeString) ?? .telegram
         self.botToken = UserDefaults.standard.string(forKey: "botToken") ?? ""
         let savedIds = UserDefaults.standard.array(forKey: "allowedChatIds") as? [Int64] ?? []
         self.allowedChatIds = Set(savedIds)
         self.copyAllMessages = UserDefaults.standard.bool(forKey: "copyAllMessages")
         self.showNotification = UserDefaults.standard.object(forKey: "showNotification") as? Bool ?? true
-        self.enableTranslation = UserDefaults.standard.object(forKey: "enableTranslation") as? Bool ?? false
         self.autoSaveImages = UserDefaults.standard.object(forKey: "autoSaveImages") as? Bool ?? false
         self.imageSavePath = UserDefaults.standard.string(forKey: "imageSavePath")
             ?? NSSearchPathForDirectoriesInDomains(.desktopDirectory, .userDomainMask, true).first ?? ""
@@ -145,88 +81,14 @@ class ServiceManager: ObservableObject {
                 self?.addMessage(item)
             }
         }
-
-        localIPAddress = LANService.getLocalIPAddress() ?? "未知"
-
-        // 初始化 Whisper ASR 模型
-        initASR()
-    }
-
-    // MARK: - Whisper ASR
-
-    private func initASR() {
-        guard WhisperASRService.isModelDownloaded else {
-            print("⚠️ [Whisper] 模型未下载")
-            return
-        }
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let success = self?.whisperASRService.initialize() ?? false
-            DispatchQueue.main.async {
-                self?.asrReady = success
-                if !success {
-                    self?.asrError = "Whisper 模型加载失败"
-                }
+        processor.onClipboardStateChange = { [weak self] state in
+            Task { @MainActor in
+                self?.updateClipboardProcessingState(state)
             }
         }
     }
 
-    func downloadASRModel() {
-        asrDownloading = true
-        asrDownloadProgress = 0
-        asrDownloadDesc = "准备下载..."
-        asrError = nil
-
-        whisperASRService.onDownloadProgress = { [weak self] progress, desc in
-            DispatchQueue.main.async {
-                self?.asrDownloadProgress = progress
-                self?.asrDownloadDesc = desc
-            }
-        }
-        whisperASRService.onDownloadComplete = { [weak self] success, error in
-            DispatchQueue.main.async {
-                self?.asrDownloading = false
-                if success {
-                    self?.asrDownloadDesc = "下载完成，正在加载模型..."
-                    self?.initASR()
-                } else {
-                    self?.asrError = error ?? "下载失败"
-                    self?.asrDownloadDesc = ""
-                }
-            }
-        }
-        whisperASRService.downloadModel()
-    }
-
-    func cancelASRDownload() {
-        whisperASRService.cancelDownload()
-        asrDownloading = false
-        asrDownloadProgress = 0
-        asrDownloadDesc = ""
-    }
-
-    // MARK: - 当前面板的启停（UI 按钮调用）
-
-    func startCurrentMode() {
-        switch activeMode {
-        case .telegram: startTelegram()
-        case .lan: startLAN()
-        }
-    }
-
-    func stopCurrentMode() {
-        switch activeMode {
-        case .telegram: stopTelegram()
-        case .lan: stopLAN()
-        }
-    }
-
-    /// 兼容旧接口：启动当前模式
-    func start() { startCurrentMode() }
-
-    /// 兼容旧接口：停止当前模式
-    func stop() { stopCurrentMode() }
-
-    // MARK: - Telegram 独立启停
+    // MARK: - Telegram 启停
 
     func stopTelegram() {
         telegramService?.stopPolling()
@@ -234,11 +96,18 @@ class ServiceManager: ObservableObject {
         telegramActive = false
         telegramStatus = .disconnected
         telegramError = nil
+        telegramConflict = false
     }
 
-    private func startTelegram() {
+    /// 另一台设备占用了 Bot 后，在本机重新开始监听（会把对方挤掉）
+    func takeOverTelegram() {
+        startTelegram()
+    }
+
+    func startTelegram() {
         // 如果已在运行，先停止
         if telegramActive { stopTelegram() }
+        telegramConflict = false
 
         let service = TelegramService()
         service.botToken = botToken
@@ -251,9 +120,15 @@ class ServiceManager: ObservableObject {
         service.onError = { [weak self] error in
             DispatchQueue.main.async { self?.telegramError = error }
         }
+        service.onConflict = { [weak self, weak service] in
+            DispatchQueue.main.async {
+                guard let self = self, let service = service,
+                      self.telegramService === service else { return }
+                self.handleTelegramConflict()
+            }
+        }
         service.onMessage = { [weak self] content, source, sourceDetail, senderName, messageId in
             guard let self = self else { return }
-            self.processor.enableTranslation = self.enableTranslation
             await self.processor.process(
                 content: content, source: source, sourceDetail: sourceDetail,
                 senderName: senderName, messageId: messageId
@@ -266,72 +141,16 @@ class ServiceManager: ObservableObject {
         service.startPolling()
     }
 
-    // MARK: - LAN 独立启停
-
-    func stopLAN() {
-        lanService?.stop()
-        lanService = nil
-        lanActive = false
-        lanStatus = .disconnected
-        lanError = nil
-        lanConnectedDevices = []
-        lanPort = 0
-    }
-
-    private func startLAN() {
-        // 如果已在运行，先停止
-        if lanActive { stopLAN() }
-
-        let service = LANService()
-
-        service.onStatusChange = { [weak self] status in
-            DispatchQueue.main.async { self?.lanStatus = status }
-        }
-        service.onError = { [weak self] error in
-            DispatchQueue.main.async { self?.lanError = error }
-        }
-        service.onMessage = { [weak self] content, source, sourceDetail, senderName, messageId in
-            guard let self = self else { return }
-            self.processor.enableTranslation = self.enableTranslation
-            await self.processor.process(
-                content: content, source: source, sourceDetail: sourceDetail,
-                senderName: senderName, messageId: messageId
-            )
-        }
-        service.onDevicesChanged = { [weak self] devices in
-            DispatchQueue.main.async { self?.lanConnectedDevices = devices }
-        }
-        service.onPortAssigned = { [weak self] port in
-            DispatchQueue.main.async { self?.lanPort = port }
-        }
-
-        // 非流式 ASR 回调：录完整段后一次性识别
-        service.onAudioReceived = { [weak self] pcmData, sampleRate, connection, key in
-            guard let self = self, self.whisperASRService.isReady else {
-                service.sendASRError(to: connection, message: "Whisper 模型未就绪")
-                return
-            }
-            DispatchQueue.global(qos: .userInitiated).async {
-                let text = self.whisperASRService.transcribe(pcmData: pcmData, sampleRate: sampleRate)
-                DispatchQueue.main.async {
-                    if text.isEmpty {
-                        service.sendASRError(to: connection, message: "识别结果为空")
-                    } else {
-                        service.sendASRFinal(to: connection, text: text)
-                    }
-                }
-            }
-        }
-
-        lanService = service
-        lanActive = true
-        do {
-            try service.start()
-        } catch {
-            lanError = "启动服务器失败: \(error.localizedDescription)"
-            lanActive = false
-            lanStatus = .error
-        }
+    private func handleTelegramConflict() {
+        let message = "另一台设备正在使用这个 Bot，本机已停止监听"
+        // 轮询循环已自行退出；不调 stopPolling，避免它回调的「未连接」盖掉错误状态
+        telegramService = nil
+        telegramActive = false
+        telegramStatus = .error
+        telegramError = message
+        telegramConflict = true
+        // 冲突提醒不受「收到消息时显示通知」开关影响
+        processor.sendNotification(title: "Telegram 冲突", body: message)
     }
 
     @MainActor
@@ -339,6 +158,24 @@ class ServiceManager: ObservableObject {
         recentMessages.insert(item, at: 0)
         if recentMessages.count > 20 {
             recentMessages = Array(recentMessages.prefix(20))
+        }
+    }
+
+    @MainActor
+    private func updateClipboardProcessingState(_ state: ClipboardProcessingState) {
+        clipboardStateResetTask?.cancel()
+        clipboardStateResetTask = nil
+        clipboardProcessingState = state
+
+        guard state == .completed else { return }
+        clipboardStateResetTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            // 2 秒内又来了新消息时旧任务被取消，不能把新消息的绿勾提前清掉
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                guard let self = self, self.clipboardProcessingState == state else { return }
+                self.clipboardProcessingState = .idle
+            }
         }
     }
 
@@ -351,18 +188,5 @@ class ServiceManager: ObservableObject {
         let service = TelegramService()
         service.botToken = botToken
         return await service.testConnection()
-    }
-
-    // MARK: - Translation
-
-    func prepareTranslation() {
-        if translationConfig == nil {
-            translationConfig = .init(
-                source: Locale.Language(identifier: "zh-Hans"),
-                target: Locale.Language(identifier: "en")
-            )
-        } else {
-            translationConfig?.invalidate()
-        }
     }
 }

@@ -38,13 +38,13 @@
 
 ```swift
 // ✅ 信息完整的日志
-print("📖 [ServiceManager] 开始启动服务 - mode=\(activeMode), isActive=\(isActive)")
+print("📖 [ServiceManager] 开始监听 - telegramActive=\(telegramActive), status=\(telegramStatus)")
 
 // ✅ 条件分支日志
 if condition {
-    print("📖 [LANService] WebSocket 连接建立 - endpoint=\(endpoint)")
+    print("📖 [TelegramService] getUpdates 成功 - 新消息数=\(updates.count)")
 } else {
-    print("📖 [LANService] 连接失败 - 原因: \(error)")
+    print("📖 [TelegramService] getUpdates 失败 - 原因: \(error)")
 }
 
 // ✅ 异步回调日志

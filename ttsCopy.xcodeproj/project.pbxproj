@@ -15,10 +15,7 @@
 		BFC2D2AF2F49DDCC000EF71E /* MessageProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFC2D2AC2F49DDCC000EF71E /* MessageProcessor.swift */; };
 		BFC2D2B02F49DDCC000EF71E /* MessageTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFC2D2AD2F49DDCC000EF71E /* MessageTypes.swift */; };
 		BFC2D2B12F49DDCC000EF71E /* ServiceManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFC2D2AE2F49DDCC000EF71E /* ServiceManager.swift */; };
-		BFC2D2B22F49DDCC000EF71E /* LANService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFC2D2AB2F49DDCC000EF71E /* LANService.swift */; };
-		CFAA000201 /* WhisperContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFAA000101 /* WhisperContext.swift */; };
-		CFAA000202 /* WhisperASRService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFAA000102 /* WhisperASRService.swift */; };
-		CFAA000203 /* libwhisper.a in Frameworks */ = {isa = PBXBuildFile; fileRef = CFAA000103 /* libwhisper.a */; };
+		E1A100000000000000000001 /* UpdaterController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1A100000000000000000002 /* UpdaterController.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -30,13 +27,10 @@
 		A1B2C3D410 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A1B2C3D411 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A1B2C3D412 /* ttsCopy.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ttsCopy.entitlements; sourceTree = "<group>"; };
-		BFC2D2AB2F49DDCC000EF71E /* LANService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LANService.swift; sourceTree = "<group>"; };
 		BFC2D2AC2F49DDCC000EF71E /* MessageProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageProcessor.swift; sourceTree = "<group>"; };
 		BFC2D2AD2F49DDCC000EF71E /* MessageTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageTypes.swift; sourceTree = "<group>"; };
 		BFC2D2AE2F49DDCC000EF71E /* ServiceManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceManager.swift; sourceTree = "<group>"; };
-		CFAA000101 /* WhisperContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhisperContext.swift; sourceTree = "<group>"; };
-		CFAA000102 /* WhisperASRService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhisperASRService.swift; sourceTree = "<group>"; };
-		CFAA000103 /* libwhisper.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libwhisper.a; path = whisper/lib/libwhisper.a; sourceTree = "<group>"; };
+		E1A100000000000000000002 /* UpdaterController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdaterController.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -44,7 +38,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				CFAA000203 /* libwhisper.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -55,7 +48,6 @@
 			isa = PBXGroup;
 			children = (
 				A1B2C3D431 /* ttsCopy */,
-				CFAA000301 /* whisper */,
 				A1B2C3D432 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -63,9 +55,6 @@
 		A1B2C3D431 /* ttsCopy */ = {
 			isa = PBXGroup;
 			children = (
-				CFAA000101 /* WhisperContext.swift */,
-				CFAA000102 /* WhisperASRService.swift */,
-				BFC2D2AB2F49DDCC000EF71E /* LANService.swift */,
 				BFC2D2AC2F49DDCC000EF71E /* MessageProcessor.swift */,
 				BFC2D2AD2F49DDCC000EF71E /* MessageTypes.swift */,
 				BFC2D2AE2F49DDCC000EF71E /* ServiceManager.swift */,
@@ -73,6 +62,7 @@
 				A1B2C3D404 /* TelegramService.swift */,
 				A1B2C3D406 /* MenuBarView.swift */,
 				A1B2C3D408 /* SettingsView.swift */,
+				E1A100000000000000000002 /* UpdaterController.swift */,
 				A1B2C3D410 /* Assets.xcassets */,
 				A1B2C3D411 /* Info.plist */,
 				A1B2C3D412 /* ttsCopy.entitlements */,
@@ -86,14 +76,6 @@
 				A1B2C3D400 /* ttsCopy.app */,
 			);
 			name = Products;
-			sourceTree = "<group>";
-		};
-		CFAA000301 /* whisper */ = {
-			isa = PBXGroup;
-			children = (
-				CFAA000103 /* libwhisper.a */,
-			);
-			name = whisper;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -117,7 +99,6 @@
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
-/* PLACEHOLDER_REST */
 
 /* Begin PBXProject section */
 		A1B2C3D460 /* Project object */ = {
@@ -172,15 +153,12 @@
 				BFC2D2AF2F49DDCC000EF71E /* MessageProcessor.swift in Sources */,
 				BFC2D2B02F49DDCC000EF71E /* MessageTypes.swift in Sources */,
 				BFC2D2B12F49DDCC000EF71E /* ServiceManager.swift in Sources */,
-				BFC2D2B22F49DDCC000EF71E /* LANService.swift in Sources */,
 				A1B2C3D407 /* SettingsView.swift in Sources */,
-				CFAA000201 /* WhisperContext.swift in Sources */,
-				CFAA000202 /* WhisperASRService.swift in Sources */,
+				E1A100000000000000000001 /* UpdaterController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
-/* PLACEHOLDER_BUILD_SETTINGS */
 
 /* Begin XCBuildConfiguration section */
 		A1B2C3D470 /* Debug */ = {
@@ -302,16 +280,16 @@
 		A1B2C3D472 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ARCHS = "$(ARCHS_STANDARD)";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = ttsCopy/ttsCopy.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 4;
+				CURRENT_PROJECT_VERSION = 5;
 				DEVELOPMENT_TEAM = YV73GGQ26P;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				HEADER_SEARCH_PATHS = "$(PROJECT_DIR)/whisper/include";
 				INFOPLIST_FILE = ttsCopy/Info.plist;
 				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2024. All rights reserved.";
@@ -319,22 +297,11 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				LIBRARY_SEARCH_PATHS = "$(PROJECT_DIR)/whisper/lib";
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 1.0.3;
-				OTHER_LDFLAGS = (
-					"-lc++",
-					"-framework",
-					Metal,
-					"-framework",
-					Accelerate,
-					"-framework",
-					Foundation,
-				);
+				MARKETING_VERSION = 1.0.4;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.longshun.ttscopy;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_INCLUDE_PATHS = "$(PROJECT_DIR)/whisper/include";
 				SWIFT_VERSION = 5.0;
 			};
 			name = Debug;
@@ -342,16 +309,16 @@
 		A1B2C3D473 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ARCHS = "$(ARCHS_STANDARD)";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = ttsCopy/ttsCopy.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 4;
+				CURRENT_PROJECT_VERSION = 5;
 				DEVELOPMENT_TEAM = YV73GGQ26P;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				HEADER_SEARCH_PATHS = "$(PROJECT_DIR)/whisper/include";
 				INFOPLIST_FILE = ttsCopy/Info.plist;
 				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2024. All rights reserved.";
@@ -359,22 +326,11 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				LIBRARY_SEARCH_PATHS = "$(PROJECT_DIR)/whisper/lib";
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 1.0.3;
-				OTHER_LDFLAGS = (
-					"-lc++",
-					"-framework",
-					Metal,
-					"-framework",
-					Accelerate,
-					"-framework",
-					Foundation,
-				);
+				MARKETING_VERSION = 1.0.4;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.longshun.ttscopy;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_INCLUDE_PATHS = "$(PROJECT_DIR)/whisper/include";
 				SWIFT_VERSION = 5.0;
 			};
 			name = Release;

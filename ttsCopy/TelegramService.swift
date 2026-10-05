@@ -17,9 +17,17 @@ class TelegramService {
     var onStatusChange: ((ConnectionStatus) -> Void)?
     var onError: ((String?) -> Void)?
     var onMessage: ((MessageContent, String, String?, String, Int64) async -> Void)?
+    /// 同一个 Bot 被另一处 getUpdates 抢占（如另一台 Mac 也在跑），轮询已停止
+    var onConflict: (() -> Void)?
 
     private var pollingTask: Task<Void, Never>?
     private var lastUpdateId: Int64 = 0
+
+    /// 最近收到 409 的时间。窗口内累计达到阈值才判定冲突，
+    /// 偶发一次（如本机刚重启、旧的长轮询还没断）只短暂重试
+    private var conflictTimestamps: [Date] = []
+    private static let conflictWindow: TimeInterval = 120
+    private static let conflictThreshold = 2
 
     var isPolling: Bool { pollingTask != nil && !(pollingTask?.isCancelled ?? true) }
 
@@ -61,11 +69,31 @@ class TelegramService {
                 }
             } catch {
                 if Task.isCancelled { break }
+                if Self.isConflict(error) {
+                    let now = Date()
+                    conflictTimestamps = conflictTimestamps.filter {
+                        now.timeIntervalSince($0) < Self.conflictWindow
+                    } + [now]
+                    if conflictTimestamps.count >= Self.conflictThreshold {
+                        onStatusChange?(.error)
+                        onError?("另一台设备正在使用这个 Bot，本机已停止监听")
+                        onConflict?()
+                        break
+                    }
+                    try? await Task.sleep(nanoseconds: 3_000_000_000)
+                    continue
+                }
                 onStatusChange?(.error)
                 onError?(error.localizedDescription)
                 try? await Task.sleep(nanoseconds: 5_000_000_000)
             }
         }
+    }
+
+    /// Telegram 409：Conflict: terminated by other getUpdates request
+    private static func isConflict(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        return nsError.domain == "TelegramAPI" && nsError.code == 409
     }
 
     private func getUpdates() async throws -> [TelegramUpdate] {

@@ -1,0 +1,231 @@
+# 每次 push 到 main（或手动 workflow_dispatch）自动：
+#   1. Release 编译 ttsCopy.app，版本号 = <MARKETING_VERSION>.<运行序号>，如 1.0.4.12
+#   2. Developer ID 签名 + 苹果公证 + staple
+#   3. 打 DMG（同样签名、公证），发布为 GitHub 正式 Release
+# 应用内更新（ttsCopy/UpdaterController.swift）读取这里发布的 Release。
+#
+# 需要在仓库 Settings → Secrets and variables → Actions 配置：
+#   DEVELOPER_ID_P12           「Developer ID Application」证书（含私钥）导出的 .p12，base64 编码
+#   DEVELOPER_ID_P12_PASSWORD  导出 .p12 时设置的密码
+#   APPLE_ID                   Apple 开发者账号邮箱
+#   APPLE_APP_PASSWORD         appleid.apple.com 生成的 App 专用密码（用于公证）
+# Team ID 固定为 YV73GGQ26P，与 UpdaterController 的签名校验保持一致。
+
+name: Build DMG
+
+on:
+  push:
+    branches: [main]
+    # 只改文档 / 协作配置不发版，避免用户收到「没有变化」的更新
+    paths-ignore:
+      - 'README.md'
+      - 'DEVELOPMENT.md'
+      - '编译运行指南.md'
+      - 'CLAUDE.md'
+      - '.claude/**'
+      - '.cursor/**'
+      - '.kiro/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-dmg-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dmg:
+    name: Build + Notarize + Release DMG
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      TEAM_ID: YV73GGQ26P
+      BUNDLE_ID: dev.longshun.ttscopy
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Check secrets
+        env:
+          DEVELOPER_ID_P12: ${{ secrets.DEVELOPER_ID_P12 }}
+          DEVELOPER_ID_P12_PASSWORD: ${{ secrets.DEVELOPER_ID_P12_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          missing=""
+          [ -n "$DEVELOPER_ID_P12" ] || missing="$missing DEVELOPER_ID_P12"
+          [ -n "$DEVELOPER_ID_P12_PASSWORD" ] || missing="$missing DEVELOPER_ID_P12_PASSWORD"
+          [ -n "$APPLE_ID" ] || missing="$missing APPLE_ID"
+          [ -n "$APPLE_APP_PASSWORD" ] || missing="$missing APPLE_APP_PASSWORD"
+          if [ -n "$missing" ]; then
+            # 未签名的包过不了应用内更新的签名校验，宁可不发
+            echo "::error::缺少 secrets:$missing（见本文件顶部说明）"
+            exit 1
+          fi
+
+      - name: Derive version
+        id: version
+        run: |
+          set -euo pipefail
+          BASE="$(grep -m1 'MARKETING_VERSION = ' ttsCopy.xcodeproj/project.pbxproj \
+            | sed -E 's/.*MARKETING_VERSION = "?([^";]+)"?;.*/\1/')"
+          VERSION="${BASE}.${GITHUB_RUN_NUMBER}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          echo "build_number=$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "VERSION=$VERSION"
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Import signing certificate
+        id: keychain
+        env:
+          DEVELOPER_ID_P12: ${{ secrets.DEVELOPER_ID_P12 }}
+          DEVELOPER_ID_P12_PASSWORD: ${{ secrets.DEVELOPER_ID_P12_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KC="$RUNNER_TEMP/signing.keychain-db"
+          KC_PW="$(uuidgen)"
+          P12="$RUNNER_TEMP/devid.p12"
+          printf '%s' "$DEVELOPER_ID_P12" | base64 --decode > "$P12"
+          security create-keychain -p "$KC_PW" "$KC"
+          security set-keychain-settings -lut 3600 "$KC"
+          security unlock-keychain -p "$KC_PW" "$KC"
+          security import "$P12" -k "$KC" -P "$DEVELOPER_ID_P12_PASSWORD" -T /usr/bin/codesign
+          # 中级证书：.p12 通常只含叶子证书，缺了 codesign 拼不出证书链
+          for ca in DeveloperIDCA DeveloperIDG2CA; do
+            curl -fsSL -o "$RUNNER_TEMP/$ca.cer" "https://www.apple.com/certificateauthority/$ca.cer"
+            security import "$RUNNER_TEMP/$ca.cer" -k "$KC" >/dev/null 2>&1 || true
+          done
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KC_PW" "$KC" >/dev/null
+          security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
+          IDENTITY="$(security find-identity -v -p codesigning "$KC" \
+            | grep "Developer ID Application" | grep "($TEAM_ID)" | awk '{print $2; exit}')"
+          [ -n "$IDENTITY" ] || { echo "::error::p12 里没有 Team $TEAM_ID 的 Developer ID Application 身份"; exit 1; }
+          echo "keychain=$KC" >> "$GITHUB_OUTPUT"
+          echo "identity=$IDENTITY" >> "$GITHUB_OUTPUT"
+
+      - name: Archive (Release)
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          BUILD_NUMBER: ${{ steps.version.outputs.build_number }}
+        run: |
+          set -euo pipefail
+          # 先不签名编译，下一步统一用 Developer ID 签名（CI 上没有 Xcode 账号，自动签名会失败）
+          # 只出 arm64 包（Apple Silicon）
+          xcodebuild \
+            -project ttsCopy.xcodeproj \
+            -scheme ttsCopy \
+            -configuration Release \
+            -derivedDataPath build \
+            -archivePath build/ttsCopy.xcarchive \
+            MARKETING_VERSION="$VERSION" \
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=NO \
+            archive
+
+      - name: Sign app
+        env:
+          KC: ${{ steps.keychain.outputs.keychain }}
+          IDENTITY: ${{ steps.keychain.outputs.identity }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          ditto build/ttsCopy.xcarchive/Products/Applications/ttsCopy.app dist/ttsCopy.app
+          codesign --force --options runtime --timestamp \
+            --entitlements ttsCopy/ttsCopy.entitlements \
+            --keychain "$KC" --sign "$IDENTITY" \
+            dist/ttsCopy.app
+          codesign --verify --deep --strict --verbose=2 dist/ttsCopy.app
+          codesign -d -r- dist/ttsCopy.app
+          # 与 UpdaterController.verifySignature 相同的要求：这里过了，应用内更新才会接受
+          codesign --verify --deep --strict -R "=identifier \"$BUNDLE_ID\" and anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] exists and certificate leaf[field.1.2.840.113635.100.6.1.13] exists and certificate leaf[subject.OU] = \"$TEAM_ID\"" dist/ttsCopy.app
+
+      - name: Notarize app
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          set -euo pipefail
+          ditto -c -k --keepParent dist/ttsCopy.app "$RUNNER_TEMP/ttsCopy.zip"
+          OUT="$(xcrun notarytool submit "$RUNNER_TEMP/ttsCopy.zip" \
+            --apple-id "$APPLE_ID" --team-id "$TEAM_ID" --password "$APPLE_APP_PASSWORD" \
+            --wait --timeout 30m --output-format json)"
+          echo "$OUT"
+          STATUS="$(echo "$OUT" | jq -r '.status')"
+          if [ "$STATUS" != "Accepted" ]; then
+            ID="$(echo "$OUT" | jq -r '.id')"
+            xcrun notarytool log "$ID" --apple-id "$APPLE_ID" --team-id "$TEAM_ID" --password "$APPLE_APP_PASSWORD" || true
+            echo "::error::App 公证未通过：$STATUS"
+            exit 1
+          fi
+          xcrun stapler staple dist/ttsCopy.app
+          xcrun stapler validate dist/ttsCopy.app
+
+      - name: Build, sign and notarize DMG
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          KC: ${{ steps.keychain.outputs.keychain }}
+          IDENTITY: ${{ steps.keychain.outputs.identity }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          set -euo pipefail
+          DMG="dist/ttsCopy-${VERSION}.dmg"
+          STAGING="$(mktemp -d)"
+          ditto dist/ttsCopy.app "$STAGING/ttsCopy.app"
+          ln -s /Applications "$STAGING/Applications"
+          hdiutil create \
+            -volname "TTS Copy $VERSION" \
+            -srcfolder "$STAGING" \
+            -fs HFS+ \
+            -format UDZO \
+            -imagekey zlib-level=9 \
+            "$DMG"
+          codesign --force --timestamp --keychain "$KC" --sign "$IDENTITY" "$DMG"
+          OUT="$(xcrun notarytool submit "$DMG" \
+            --apple-id "$APPLE_ID" --team-id "$TEAM_ID" --password "$APPLE_APP_PASSWORD" \
+            --wait --timeout 30m --output-format json)"
+          echo "$OUT"
+          STATUS="$(echo "$OUT" | jq -r '.status')"
+          if [ "$STATUS" != "Accepted" ]; then
+            ID="$(echo "$OUT" | jq -r '.id')"
+            xcrun notarytool log "$ID" --apple-id "$APPLE_ID" --team-id "$TEAM_ID" --password "$APPLE_APP_PASSWORD" || true
+            echo "::error::DMG 公证未通过：$STATUS"
+            exit 1
+          fi
+          xcrun stapler staple "$DMG"
+          spctl --assess --type open --context context:primary-signature --verbose=2 "$DMG"
+          echo "DMG=$DMG" >> "$GITHUB_ENV"
+          ls -lh "$DMG"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: TTS Copy ${{ steps.version.outputs.version }}
+          files: ${{ env.DMG }}
+          generate_release_notes: true
+          prerelease: false
+          make_latest: true
+          fail_on_unmatched_files: true
+          body: |
+            自动构建（push → main），已通过 Developer ID 签名与苹果公证。
+
+            - 版本: `${{ steps.version.outputs.version }}`
+            - 提交: `${{ github.sha }}`
+
+            **首次安装**：打开 DMG，把 `ttsCopy.app` 拖到「应用程序」，从「应用程序」启动。
+            之后的版本会在 App 内提示更新，点「更新并重启」即可。
+
+      - name: Clean up keychain
+        if: always()
+        env:
+          KC: ${{ steps.keychain.outputs.keychain }}
+        run: |
+          [ -n "${KC:-}" ] && security delete-keychain "$KC" || true
