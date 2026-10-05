@@ -56,11 +56,11 @@ commit 信息除了 type 和 scope 部分可以使用英文，其余部分需使
 ### 5. 输出示例
 
 ```
-feat(lan): ✨ 新增局域网 WebSocket 服务器模式
+feat(telegram): ✨ 新增 Bot 冲突检测与本机接管
 
-- 新增 LANService 实现 NWListener WebSocket 服务器
-- 支持 Bonjour 服务发现，手机端可自动扫描
-- 新增 ServiceManager 统一管理双模式切换
+- TelegramService 识别连续 409 冲突并停止轮询
+- 冲突时发送系统通知，面板显示「在本机接管」按钮
+- ServiceManager 统一处理冲突状态与重新监听
 ```
 
 ### 6. 禁止事项

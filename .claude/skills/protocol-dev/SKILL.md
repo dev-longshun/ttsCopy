@@ -89,7 +89,6 @@ user-invocable: false
 1. 确认项目最低支持版本（当前：macOS 15 Sequoia）
 2. 检查 API 兼容性
 3. 注意 Swift 并发模型（项目使用 Swift 5 语言模式 + async/await）
-4. 注意 Network.framework 和 WebSocket 相关 API 的使用
 
 ### 6. 分支合并
 

@@ -55,18 +55,16 @@
 - **平台**：macOS 15+ (Sequoia)
 - **UI**：SwiftUI
 - **并发**：Swift async/await
-- **网络 (Telegram)**：URLSession
-- **网络 (LAN)**：Network.framework (NWListener + WebSocket)
-- **服务发现**：Bonjour (mDNS), 服务类型 `_ttscopy._tcp`
-- **翻译**：Apple Translation framework
+- **网络**：URLSession（Telegram Bot API 长轮询）
 - **构建**：Swift Package Manager 6.0, Swift 5 语言模式
 - **持久化**：UserDefaults
 
 ## 架构要点
 
 - `ServiceManager` 是核心状态管理器，作为 `@EnvironmentObject` 注入 UI
-- `TelegramService` 和 `LANService` 是纯传输层，通过回调与 ServiceManager 通信
-- `MessageProcessor` 负责消息处理（剪贴板/通知/翻译/图片保存）
+- `TelegramService` 是纯传输层，通过回调与 ServiceManager 通信
+- `MessageProcessor` 负责消息处理（剪贴板/通知/图片保存）
+- `UpdaterController` 负责应用内更新
 - `MessageTypes` 定义共享类型
 
 ## 标准交互工作流

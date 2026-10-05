@@ -12,13 +12,9 @@
 
 ## 项目概要
 
-ttsCopy — macOS 菜单栏应用，双模式接收消息并复制到剪贴板：
-- Telegram 模式：Bot API 长轮询
-- LAN 模式：WebSocket 服务器 + Bonjour 广播，配合手机端 App
+ttsCopy — macOS 菜单栏应用，监听 Telegram Bot 消息（Bot API 长轮询）并复制到剪贴板。
 
-技术栈：SwiftUI / Swift async-await / Network.framework / macOS 15+
-
-当前分支：`feature/lan-mode`
+技术栈：SwiftUI / Swift async-await / URLSession / macOS 15+
 
 ## 关键约束
 
@@ -36,10 +32,10 @@ ttsCopy — macOS 菜单栏应用，双模式接收消息并复制到剪贴板�
 核心代码在 `ttsCopy/` 目录：
 - `ttsCopyApp.swift` — App 入口
 - `ServiceManager.swift` — 统一服务管理
-- `TelegramService.swift` — Telegram 传输层
-- `LANService.swift` — WebSocket + Bonjour
-- `MessageProcessor.swift` — 消息处理
+- `TelegramService.swift` — Telegram 传输层（长轮询 / 409 冲突检测）
+- `MessageProcessor.swift` — 消息处理（剪贴板 / 通知 / 图片保存）
 - `MessageTypes.swift` — 共享类型
+- `UpdaterController.swift` — 应用内更新
 - `MenuBarView.swift` / `SettingsView.swift` — UI
 
 详细架构见 `DEVELOPMENT.md`。

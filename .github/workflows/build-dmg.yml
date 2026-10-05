@@ -1,8 +1,7 @@
 # 每次 push 到 main（或手动 workflow_dispatch）自动：
-#   1. 编译 whisper.cpp 静态库（按 scripts/build-whisper.sh 内容缓存）
-#   2. Release 编译 ttsCopy.app，版本号 = <MARKETING_VERSION>.<运行序号>，如 1.0.4.12
-#   3. Developer ID 签名 + 苹果公证 + staple
-#   4. 打 DMG（同样签名、公证），发布为 GitHub 正式 Release
+#   1. Release 编译 ttsCopy.app，版本号 = <MARKETING_VERSION>.<运行序号>，如 1.0.4.12
+#   2. Developer ID 签名 + 苹果公证 + staple
+#   3. 打 DMG（同样签名、公证），发布为 GitHub 正式 Release
 # 应用内更新（ttsCopy/UpdaterController.swift）读取这里发布的 Release。
 #
 # 需要在仓库 Settings → Secrets and variables → Actions 配置：
@@ -79,20 +78,6 @@ jobs:
       - name: Show Xcode version
         run: xcodebuild -version
 
-      - name: Cache whisper.cpp
-        id: whisper-cache
-        uses: actions/cache@v5
-        with:
-          path: whisper
-          key: whisper-${{ runner.os }}-${{ hashFiles('scripts/build-whisper.sh') }}
-
-      - name: Build whisper.cpp
-        if: steps.whisper-cache.outputs.cache-hit != 'true'
-        run: |
-          set -euo pipefail
-          command -v cmake >/dev/null || brew install cmake
-          bash scripts/build-whisper.sh
-
       - name: Import signing certificate
         id: keychain
         env:
@@ -128,7 +113,7 @@ jobs:
         run: |
           set -euo pipefail
           # 先不签名编译，下一步统一用 Developer ID 签名（CI 上没有 Xcode 账号，自动签名会失败）
-          # whisper 静态库只有 arm64，所以只出 arm64 包
+          # 只出 arm64 包（Apple Silicon）
           xcodebuild \
             -project ttsCopy.xcodeproj \
             -scheme ttsCopy \

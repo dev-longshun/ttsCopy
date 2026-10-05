@@ -7,15 +7,6 @@
 
 import Foundation
 
-// MARK: - Service Mode
-
-enum ServiceMode: String, CaseIterable, Identifiable {
-    case telegram = "Telegram"
-    case lan = "LAN"
-
-    var id: String { rawValue }
-}
-
 // MARK: - Connection Status
 
 enum ConnectionStatus: String {
@@ -29,9 +20,7 @@ enum ConnectionStatus: String {
 
 enum ClipboardProcessingState: Equatable {
     case idle
-    case processing
     case completed
-    case failed
 }
 
 // MARK: - Message Types

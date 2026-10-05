@@ -2,7 +2,7 @@
 //  ttsCopyApp.swift
 //  ttsCopy
 //
-//  TTS Copy - 自动复制消息到剪贴板（支持 Telegram / 局域网模式）
+//  TTS Copy - 自动复制 Telegram 消息到剪贴板
 //
 
 import SwiftUI
@@ -45,15 +45,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         bindUpdateBadge()
         updater.startDeferred()
 
-        // Auto-start：根据上次的面板模式启动对应服务
-        // 两个服务独立运行，这里只自动启动用户上次使用的模式
-        switch serviceManager.activeMode {
-        case .telegram:
-            if !serviceManager.botToken.isEmpty {
-                serviceManager.startCurrentMode()
-            }
-        case .lan:
-            serviceManager.startCurrentMode()
+        // Auto-start：已配置 Bot Token 时自动开始监听
+        if !serviceManager.botToken.isEmpty {
+            serviceManager.startTelegram()
         }
     }
 
@@ -143,15 +137,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         case .idle:
             symbolName = "message.circle"
             tintColor = .systemBlue
-        case .processing:
-            symbolName = "arrow.triangle.2.circlepath.circle.fill"
-            tintColor = .systemOrange
         case .completed:
             symbolName = "checkmark.circle.fill"
             tintColor = .systemGreen
-        case .failed:
-            symbolName = "exclamationmark.circle.fill"
-            tintColor = .systemRed
         }
 
         let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: "TTS Copy")
@@ -200,6 +188,5 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
     func applicationWillTerminate(_ notification: Notification) {
         serviceManager.stopTelegram()
-        serviceManager.stopLAN()
     }
 }

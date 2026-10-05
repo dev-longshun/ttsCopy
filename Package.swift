@@ -14,9 +14,6 @@ let package = Package(
             name: "ttsCopy",
             path: "ttsCopy",
             exclude: ["Info.plist", "ttsCopy.entitlements", "Assets.xcassets"],
-            resources: [
-                .copy("PromptOptimizerSystemPrompt.md")
-            ],
             swiftSettings: [
                 .unsafeFlags(["-parse-as-library"]),
                 .swiftLanguageMode(.v5)

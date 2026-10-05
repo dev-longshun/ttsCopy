@@ -38,29 +38,17 @@ struct MenuBarView: View {
                 Divider()
             }
 
-            // 双服务状态栏
-            HStack(spacing: 16) {
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(telegramStatusColor)
-                        .frame(width: 7, height: 7)
-                    Text("Telegram")
-                        .font(.caption)
-                    Text(telegramStatusText)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
+            // Telegram 状态栏
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(telegramStatusColor)
+                    .frame(width: 7, height: 7)
+                Text("Telegram")
+                    .font(.caption)
+                Text(telegramStatusText)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
                 Spacer()
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(lanStatusColor)
-                        .frame(width: 7, height: 7)
-                    Text("LAN")
-                        .font(.caption)
-                    Text(lanStatusText)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
             }
             .padding(.horizontal)
             .padding(.vertical, 6)
@@ -81,76 +69,29 @@ struct MenuBarView: View {
 
             Divider()
 
-            // 模式切换
-            Picker("", selection: $service.activeMode) {
-                ForEach(ServiceMode.allCases) { mode in
-                    Text(mode.rawValue).tag(mode)
-                }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .padding(.horizontal)
-            .padding(.vertical, 8)
-
             // 控制按钮
             HStack(spacing: 12) {
                 Button(action: {
-                    if service.isActive {
-                        service.stopCurrentMode()
+                    if service.telegramActive {
+                        service.stopTelegram()
                     } else {
-                        service.startCurrentMode()
+                        service.startTelegram()
                     }
                 }) {
                     HStack {
-                        Image(systemName: service.isActive ? "stop.fill" : "play.fill")
-                        Text(buttonLabel)
+                        Image(systemName: service.telegramActive ? "stop.fill" : "play.fill")
+                        Text(service.telegramActive ? "停止监听" : "开始监听")
                     }
                     .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
-                .tint(service.isActive ? .red : .green)
+                .tint(service.telegramActive ? .red : .green)
             }
             .padding()
 
-            // LAN 状态信息
-            if service.activeMode == .lan && service.isActive {
-                GroupBox {
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack {
-                            Text("IP 地址")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                            Spacer()
-                            Text(service.localIPAddress)
-                                .font(.system(.caption, design: .monospaced))
-                                .textSelection(.enabled)
-                        }
-                        HStack {
-                            Text("端口号")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                            Spacer()
-                            Text(String(service.lanPort))
-                                .font(.system(.caption, design: .monospaced))
-                                .textSelection(.enabled)
-                        }
-                        HStack {
-                            Text("已连接设备")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                            Spacer()
-                            Text("\(service.lanConnectedDevices.count)")
-                                .font(.caption)
-                        }
-                    }
-                }
-                .padding(.horizontal)
-                .padding(.bottom, 8)
-            }
-
             // 错误信息
-            if let error = service.lastError {
+            if let error = service.telegramError {
                 HStack {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundColor(.orange)
@@ -163,7 +104,7 @@ struct MenuBarView: View {
             }
 
             // Telegram 被另一台设备占用
-            if service.activeMode == .telegram && service.telegramConflict {
+            if service.telegramConflict {
                 Button(action: { service.takeOverTelegram() }) {
                     Label("在本机接管", systemImage: "arrow.uturn.down.circle")
                         .frame(maxWidth: .infinity)
@@ -241,15 +182,7 @@ struct MenuBarView: View {
         }
     }
 
-    private var buttonLabel: String {
-        if service.isActive {
-            return service.activeMode == .telegram ? "停止监听" : "停止服务"
-        } else {
-            return service.activeMode == .telegram ? "开始监听" : "启动服务"
-        }
-    }
-
-    // MARK: - 双服务状态
+    // MARK: - Telegram 状态
 
     private var telegramStatusColor: Color {
         switch service.telegramStatus {
@@ -270,48 +203,24 @@ struct MenuBarView: View {
         }
     }
 
-    private var lanStatusColor: Color {
-        switch service.lanStatus {
-        case .connected: return .green
-        case .connecting: return .yellow
-        case .error: return .red
-        case .disconnected: return .gray
-        }
-    }
-
-    private var lanStatusText: String {
-        switch service.lanStatus {
-        case .connected: return "运行中"
-        case .connecting: return "启动中"
-        case .error: return "错误"
-        case .disconnected: return "未启动"
-        }
-    }
-
     private var clipboardStatusColor: Color {
         switch service.clipboardProcessingState {
         case .idle: return .blue
-        case .processing: return .orange
         case .completed: return .green
-        case .failed: return .red
         }
     }
 
     private var clipboardStatusText: String {
         switch service.clipboardProcessingState {
         case .idle: return "剪贴板就绪"
-        case .processing: return "原文已复制，正在优化..."
-        case .completed: return "优化完成，已覆盖剪贴板"
-        case .failed: return "处理失败，已保留原文"
+        case .completed: return "已复制到剪贴板"
         }
     }
 
     private var clipboardStatusIconName: String {
         switch service.clipboardProcessingState {
         case .idle: return "message.circle.fill"
-        case .processing: return "arrow.triangle.2.circlepath.circle.fill"
         case .completed: return "checkmark.circle.fill"
-        case .failed: return "exclamationmark.circle.fill"
         }
     }
 

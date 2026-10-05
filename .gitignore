@@ -50,12 +50,6 @@ fastlane/test_output
 *.swo
 *~
 
-# ASR 模型文件（太大，不入库）
-models/
-
-# whisper.cpp 编译产物（通过 scripts/build-whisper.sh 重新生成）
-whisper/
-
 # Misc
 *.log
 .env
