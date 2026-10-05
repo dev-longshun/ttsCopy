@@ -131,21 +131,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     private func updateStatusItemAppearance(for state: ClipboardProcessingState) {
         guard let button = statusItem?.button else { return }
 
-        let symbolName: String
-        let tintColor: NSColor
+        let image: NSImage?
         switch state {
         case .idle:
-            symbolName = "message.circle"
-            tintColor = .systemBlue
+            // 模板图：系统按菜单栏深浅自动画成白色或黑色
+            image = NSImage(systemSymbolName: "message.circle", accessibilityDescription: "TTS Copy")
+            image?.isTemplate = true
         case .completed:
-            symbolName = "checkmark.circle.fill"
-            tintColor = .systemGreen
+            // 彩色图：不走模板着色，深浅菜单栏都显示绿色
+            image = NSImage(systemSymbolName: "checkmark.circle.fill", accessibilityDescription: "TTS Copy")?
+                .withSymbolConfiguration(.init(paletteColors: [.systemGreen]))
+            image?.isTemplate = false
         }
 
-        let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: "TTS Copy")
-        image?.isTemplate = true
         button.image = image
-        button.contentTintColor = tintColor
+        // 模板图叠加着色在深色菜单栏上会被画成近乎黑色，统一不设 tint
+        button.contentTintColor = nil
     }
 
     // MARK: - 更新红点
