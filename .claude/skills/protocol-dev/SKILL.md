@@ -53,6 +53,8 @@ user-invocable: false
 
 **`git commit` 流程**：先输出 commit 信息供用户审核，然后主动询问是否执行提交，用户确认后再执行，提交内容必须与展示内容完全一致，禁止附加任何辅助编程标识信息（如 Co-Authored-By 等）。
 
+**`git push` 流程**：普通 `git push` 已在权限配置中放行、不再弹确认，但推不推仍由用户指令决定——用户只说"提交"时只 commit 不 push；用户明确说"推送""推 main""部署"等时，commit 后直接 push，不再二次询问。强推（`--force` / `-f`）一律先说明风险并等待确认；项目 `AGENTS.md` / `CLAUDE.md` 若另有推送约束（如禁止直推 master、推送前需用户测试），以更严格的为准。
+
 **详细规范**：生成前必须先读取 [references/commit-guide.md](references/commit-guide.md)
 
 ### 3. Bug 调试
