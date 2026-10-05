@@ -9,6 +9,7 @@ import SwiftUI
 
 struct MenuBarView: View {
     @EnvironmentObject var service: ServiceManager
+    @EnvironmentObject var updater: UpdaterController
     @State private var showingSettings = false
 
     var body: some View {
@@ -30,6 +31,12 @@ struct MenuBarView: View {
             .background(Color(NSColor.windowBackgroundColor))
 
             Divider()
+
+            // 新版本提示
+            if updater.showsUpdateBadge {
+                UpdateBanner()
+                Divider()
+            }
 
             // 双服务状态栏
             HStack(spacing: 16) {
@@ -155,6 +162,18 @@ struct MenuBarView: View {
                 .padding(.bottom, 8)
             }
 
+            // Telegram 被另一台设备占用
+            if service.activeMode == .telegram && service.telegramConflict {
+                Button(action: { service.takeOverTelegram() }) {
+                    Label("在本机接管", systemImage: "arrow.uturn.down.circle")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .padding(.horizontal)
+                .padding(.bottom, 8)
+                .help("在本机重新开始监听，另一台设备会被挤掉")
+            }
+
             Divider()
 
             // 最近消息列表
@@ -206,7 +225,7 @@ struct MenuBarView: View {
                     .buttonStyle(.plain)
                     .foregroundColor(.red)
                 Spacer()
-                Text("v1.1")
+                Text("v\(UpdaterController.currentVersionString())")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -218,6 +237,7 @@ struct MenuBarView: View {
         .sheet(isPresented: $showingSettings) {
             SettingsView()
                 .environmentObject(service)
+                .environmentObject(updater)
         }
     }
 
@@ -241,6 +261,7 @@ struct MenuBarView: View {
     }
 
     private var telegramStatusText: String {
+        if service.telegramConflict { return "被占用" }
         switch service.telegramStatus {
         case .connected: return "监听中"
         case .connecting: return "连接中"
@@ -294,6 +315,77 @@ struct MenuBarView: View {
         }
     }
 
+}
+
+// MARK: - 更新横幅
+
+struct UpdateBanner: View {
+    @EnvironmentObject var updater: UpdaterController
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Image(systemName: "arrow.down.circle.fill")
+                    .foregroundColor(.accentColor)
+                Text(title)
+                    .font(.callout)
+                Spacer()
+                actionButton
+            }
+            if updater.phase == .downloading {
+                ProgressView(value: updater.downloadProgress)
+                    .controlSize(.small)
+            }
+            if updater.phase == .failed, !updater.statusMessage.isEmpty {
+                Text(updater.statusMessage)
+                    .font(.caption)
+                    .foregroundColor(.red)
+                    .lineLimit(2)
+            }
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+        .background(Color.accentColor.opacity(0.08))
+    }
+
+    private var title: String {
+        let version = updater.availableVersion.map { "v\($0)" } ?? ""
+        switch updater.phase {
+        case .downloading:
+            return "正在下载 \(version)… \(Int(updater.downloadProgress * 100))%"
+        case .installing:
+            return updater.statusMessage
+        case .readyToInstall:
+            return "新版本已就绪"
+        case .failed:
+            return "更新失败"
+        default:
+            return "发现新版本 \(version)"
+        }
+    }
+
+    @ViewBuilder
+    private var actionButton: some View {
+        switch updater.phase {
+        case .available:
+            Button("更新并重启") { updater.installAndRelaunch() }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+        case .failed:
+            Button("重试") { updater.installAndRelaunch() }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+        case .readyToInstall:
+            Button("退出并安装") { updater.quitToFinishInstall() }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+        case .downloading, .installing:
+            ProgressView()
+                .controlSize(.small)
+        default:
+            EmptyView()
+        }
+    }
 }
 
 struct MessageRow: View {
@@ -387,4 +479,5 @@ struct VisualEffectView: NSViewRepresentable {
 #Preview {
     MenuBarView()
         .environmentObject(ServiceManager())
+        .environmentObject(UpdaterController())
 }

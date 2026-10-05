@@ -70,10 +70,14 @@ enum ASRModel: String, CaseIterable, Identifiable {
 
 class WhisperASRService: NSObject, URLSessionDownloadDelegate {
 
+    /// whisperContext / loadedModel 只在 processingQueue 上读写：
+    /// 加载、识别、释放串行执行，识别途中不会被释放
     private var whisperContext: WhisperContext?
-    private(set) var isReady = false
-    private(set) var currentModel: ASRModel?
+    private var loadedModel: ASRModel?
     private let processingQueue = DispatchQueue(label: "com.ttscopy.whisper-asr", qos: .userInitiated)
+
+    /// 模型加载 / 释放后在主线程回调，nil 表示内存里已没有模型
+    var onLoadedModelChange: ((ASRModel?) -> Void)?
 
     // MARK: - 下载状态
 
@@ -208,24 +212,63 @@ class WhisperASRService: NSObject, URLSessionDownloadDelegate {
         }
     }
 
-    // MARK: - 初始化
+    // MARK: - 加载 / 释放
 
-    func initialize(model: ASRModel) -> Bool {
+    /// 加载模型（同一模型已加载则直接返回）。会阻塞调用线程，不要在主线程调用
+    @discardableResult
+    func load(model: ASRModel) -> Bool {
+        processingQueue.sync { loadOnQueue(model) }
+    }
+
+    /// 异步释放模型内存；排在进行中的识别之后执行
+    func release() {
+        processingQueue.async { [weak self] in
+            self?.releaseOnQueue()
+        }
+    }
+
+    /// 删除已下载的模型文件（移到废纸篓）；正在使用则先释放。会阻塞调用线程
+    func deleteModel(_ model: ASRModel) throws {
+        processingQueue.sync {
+            if loadedModel == model { releaseOnQueue() }
+        }
+        let url = URL(fileURLWithPath: Self.modelPath(for: model))
+        try FileManager.default.trashItem(at: url, resultingItemURL: nil)
+        print("🗑️ [Whisper] 模型已移到废纸篓: \(model.displayName)")
+    }
+
+    private func loadOnQueue(_ model: ASRModel) -> Bool {
+        if loadedModel == model, whisperContext != nil { return true }
+        releaseOnQueue()
+
         guard Self.isModelDownloaded(model) else {
             print("❌ [Whisper] 模型文件不存在: \(model.displayName)")
             return false
         }
-
-        let path = Self.modelPath(for: model)
-        guard let ctx = WhisperContext.createContext(path: path) else {
+        guard let ctx = WhisperContext.createContext(path: Self.modelPath(for: model)) else {
             return false
         }
 
         whisperContext = ctx
-        currentModel = model
-        isReady = true
+        loadedModel = model
+        notifyLoadedModel(model)
         print("✅ [Whisper] ASR 服务就绪: \(model.displayName)")
         return true
+    }
+
+    private func releaseOnQueue() {
+        guard whisperContext != nil else { return }
+        // WhisperContext deinit 调用 whisper_free 归还内存
+        whisperContext = nil
+        loadedModel = nil
+        notifyLoadedModel(nil)
+        print("🔄 [Whisper] 模型已释放")
+    }
+
+    private func notifyLoadedModel(_ model: ASRModel?) {
+        DispatchQueue.main.async { [weak self] in
+            self?.onLoadedModelChange?(model)
+        }
     }
 
     // MARK: - 模型信息
@@ -240,35 +283,20 @@ class WhisperASRService: NSObject, URLSessionDownloadDelegate {
         }
     }
 
-    var modelInfo: ModelInfo? {
-        guard isReady, let model = currentModel else { return nil }
-        return ModelInfo(
-            name: model.displayName,
-            precision: model.precision,
-            sizeMB: model.sizeMB
-        )
-    }
-
     // MARK: - 识别
 
-    /// 接收 Int16 PCM 数据，转 Float32 后调用 Whisper 识别
-    func transcribe(pcmData: Data, sampleRate: Int = 16000) -> String {
-        guard let whisperContext = whisperContext, let model = currentModel, isReady else { return "" }
+    /// 接收 Int16 PCM 数据，转 Float32 后调用 Whisper 识别；模型未加载会先加载。
+    /// 返回 nil 表示模型加载失败。会阻塞调用线程，不要在主线程调用
+    func transcribe(pcmData: Data, sampleRate: Int = 16000, model: ASRModel) -> String? {
+        processingQueue.sync {
+            guard loadOnQueue(model), let whisperContext = whisperContext else { return nil }
 
-        return processingQueue.sync {
             let samples = pcmToFloat(pcmData)
             guard !samples.isEmpty else { return "" }
 
             let rawText = whisperContext.transcribe(samples: samples, model: model)
             return processCodeText(rawText)
         }
-    }
-
-    /// 释放模型
-    func release() {
-        whisperContext = nil
-        isReady = false
-        print("🔄 [Whisper] 模型已释放")
     }
 
     // MARK: - Private

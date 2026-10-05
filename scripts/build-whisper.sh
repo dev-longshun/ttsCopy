@@ -3,7 +3,12 @@
 # 编译 whisper.cpp 静态库（macOS arm64 + Metal GPU 加速）
 # 编译产物输出到项目根目录 whisper/ 下
 #
+# 版本固定为 WHISPER_CPP_REF，避免上游改接口导致 CI 发版突然编译失败。
+# 升级时改这里的版本号，CI 缓存 key 跟随本文件内容自动失效。
+#
 set -e
+
+WHISPER_CPP_REF="${WHISPER_CPP_REF:-v1.8.4}"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
@@ -24,8 +29,8 @@ if [ -d "$TMP_DIR" ]; then
     rm -rf "$TMP_DIR"
 fi
 
-echo "📥 克隆 whisper.cpp..."
-git clone --depth 1 https://github.com/ggerganov/whisper.cpp.git "$TMP_DIR"
+echo "📥 克隆 whisper.cpp ($WHISPER_CPP_REF)..."
+git clone --depth 1 --branch "$WHISPER_CPP_REF" https://github.com/ggml-org/whisper.cpp.git "$TMP_DIR"
 
 # 编译
 echo "⚙️  配置 cmake..."

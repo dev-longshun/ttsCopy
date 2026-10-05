@@ -25,6 +25,8 @@ class ServiceManager: ObservableObject {
     @Published var telegramActive = false
     @Published var telegramStatus: ConnectionStatus = .disconnected
     @Published var telegramError: String?
+    /// 同一个 Bot 被另一台设备占用（Telegram 409），本机已停止监听
+    @Published var telegramConflict = false
 
     @Published var lanActive = false
     @Published var lanStatus: ConnectionStatus = .disconnected
@@ -150,16 +152,30 @@ class ServiceManager: ObservableObject {
             UserDefaults.standard.set(selectedASRModel.rawValue, forKey: "selectedASRModel")
         }
     }
-    @Published var asrReady = false
+    /// 当前加载在内存里的模型（nil = 未加载）。模型按需加载、闲置释放
+    @Published private(set) var asrLoadedModel: ASRModel?
+    @Published private(set) var asrLoading = false
     @Published var asrDownloading = false
     @Published var asrDownloadProgress: Double = 0
     @Published var asrDownloadDesc: String = ""
     @Published var asrError: String?
 
+    var asrReady: Bool { asrLoadedModel != nil }
+
     func isASRModelDownloaded(_ model: ASRModel) -> Bool {
         WhisperASRService.isModelDownloaded(model)
     }
-    var asrModelInfo: WhisperASRService.ModelInfo? { whisperASRService.modelInfo }
+    var asrModelInfo: WhisperASRService.ModelInfo? {
+        asrLoadedModel.map {
+            WhisperASRService.ModelInfo(name: $0.displayName, precision: $0.precision, sizeMB: $0.sizeMB)
+        }
+    }
+
+    /// 最近一次加载 / 识别后闲置多久释放模型内存
+    static let asrIdleReleaseDelay: TimeInterval = 5 * 60
+    /// 手机全部断开后多久释放（留余量给短暂断线重连）
+    private static let asrDisconnectReleaseDelay: TimeInterval = 30
+    private var asrReleaseWorkItem: DispatchWorkItem?
 
     // MARK: - Init
 
@@ -204,24 +220,71 @@ class ServiceManager: ObservableObject {
 
         localIPAddress = LANService.getLocalIPAddress() ?? "未知"
 
-        // 初始化 Whisper ASR 模型
-        initASR()
+        // Whisper 模型不在启动时加载：收到语音时按需加载，闲置后释放
+        whisperASRService.onLoadedModelChange = { [weak self] model in
+            self?.asrLoadedModel = model
+        }
     }
 
-    // MARK: - Whisper ASR
+    // MARK: - Whisper ASR（按需加载，闲置释放）
 
-    private func initASR() {
+    /// 后台预加载当前模型（手机开始录音时调用，录完时模型已就绪）
+    func preloadASR() {
         let model = selectedASRModel
-        guard WhisperASRService.isModelDownloaded(model) else {
-            print("⚠️ [Whisper] 模型未下载: \(model.displayName)")
+        guard WhisperASRService.isModelDownloaded(model) else { return }
+        if asrLoadedModel == model {
+            scheduleASRRelease(after: Self.asrIdleReleaseDelay)
             return
         }
+        guard !asrLoading else { return }
+        cancelASRRelease()
+        asrLoading = true
+        asrError = nil
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let success = self?.whisperASRService.initialize(model: model) ?? false
+            guard let self = self else { return }
+            let success = self.whisperASRService.load(model: model)
             DispatchQueue.main.async {
-                self?.asrReady = success
-                if !success {
-                    self?.asrError = "\(model.shortName) 模型加载失败"
+                self.asrLoading = false
+                if success {
+                    self.scheduleASRRelease(after: Self.asrIdleReleaseDelay)
+                } else {
+                    self.asrError = "\(model.shortName) 模型加载失败"
+                }
+            }
+        }
+    }
+
+    private func scheduleASRRelease(after delay: TimeInterval) {
+        asrReleaseWorkItem?.cancel()
+        let item = DispatchWorkItem { [weak self] in
+            self?.asrReleaseWorkItem = nil
+            self?.whisperASRService.release()
+        }
+        asrReleaseWorkItem = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: item)
+    }
+
+    private func cancelASRRelease() {
+        asrReleaseWorkItem?.cancel()
+        asrReleaseWorkItem = nil
+    }
+
+    private func releaseASRNow() {
+        cancelASRRelease()
+        whisperASRService.release()
+    }
+
+    /// 删除已下载的模型文件（移到废纸篓）
+    func deleteASRModel(_ model: ASRModel) {
+        asrError = nil
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+            do {
+                try self.whisperASRService.deleteModel(model)
+                DispatchQueue.main.async { self.objectWillChange.send() }
+            } catch {
+                DispatchQueue.main.async {
+                    self.asrError = "删除 \(model.shortName) 失败：\(error.localizedDescription)"
                 }
             }
         }
@@ -244,8 +307,7 @@ class ServiceManager: ObservableObject {
             DispatchQueue.main.async {
                 self?.asrDownloading = false
                 if success {
-                    self?.asrDownloadDesc = "下载完成，正在加载模型..."
-                    self?.initASR()
+                    self?.asrDownloadDesc = ""
                 } else {
                     self?.asrError = error ?? "下载失败"
                     self?.asrDownloadDesc = ""
@@ -262,17 +324,12 @@ class ServiceManager: ObservableObject {
         asrDownloadDesc = ""
     }
 
-    /// 切换 ASR 模型：释放当前模型，加载新模型（如已下载）
+    /// 切换 ASR 模型：释放当前模型，新模型等下次收到语音时再加载
     func switchASRModel(to model: ASRModel) {
-        guard model != selectedASRModel || !asrReady else { return }
+        guard model != selectedASRModel else { return }
         selectedASRModel = model
-        asrReady = false
         asrError = nil
-        whisperASRService.release()
-
-        if WhisperASRService.isModelDownloaded(model) {
-            initASR()
-        }
+        releaseASRNow()
     }
 
     // MARK: - 当前面板的启停（UI 按钮调用）
@@ -305,11 +362,18 @@ class ServiceManager: ObservableObject {
         telegramActive = false
         telegramStatus = .disconnected
         telegramError = nil
+        telegramConflict = false
+    }
+
+    /// 另一台设备占用了 Bot 后，在本机重新开始监听（会把对方挤掉）
+    func takeOverTelegram() {
+        startTelegram()
     }
 
     private func startTelegram() {
         // 如果已在运行，先停止
         if telegramActive { stopTelegram() }
+        telegramConflict = false
 
         let service = TelegramService()
         service.botToken = botToken
@@ -321,6 +385,13 @@ class ServiceManager: ObservableObject {
         }
         service.onError = { [weak self] error in
             DispatchQueue.main.async { self?.telegramError = error }
+        }
+        service.onConflict = { [weak self, weak service] in
+            DispatchQueue.main.async {
+                guard let self = self, let service = service,
+                      self.telegramService === service else { return }
+                self.handleTelegramConflict()
+            }
         }
         service.onMessage = { [weak self] content, source, sourceDetail, senderName, messageId in
             guard let self = self else { return }
@@ -338,6 +409,18 @@ class ServiceManager: ObservableObject {
         service.startPolling()
     }
 
+    private func handleTelegramConflict() {
+        let message = "另一台设备正在使用这个 Bot，本机已停止监听"
+        // 轮询循环已自行退出；不调 stopPolling，避免它回调的「未连接」盖掉错误状态
+        telegramService = nil
+        telegramActive = false
+        telegramStatus = .error
+        telegramError = message
+        telegramConflict = true
+        // 冲突提醒不受「收到消息时显示通知」开关影响
+        processor.sendNotification(title: "Telegram 冲突", body: message)
+    }
+
     // MARK: - LAN 独立启停
 
     func stopLAN() {
@@ -348,6 +431,7 @@ class ServiceManager: ObservableObject {
         lanError = nil
         lanConnectedDevices = []
         lanPort = 0
+        releaseASRNow()
     }
 
     private func startLAN() {
@@ -372,24 +456,44 @@ class ServiceManager: ObservableObject {
             )
         }
         service.onDevicesChanged = { [weak self] devices in
-            DispatchQueue.main.async { self?.lanConnectedDevices = devices }
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                self.lanConnectedDevices = devices
+                // 手机全部断开：稍等片刻（防短暂重连）后释放模型内存
+                if devices.isEmpty && self.asrLoadedModel != nil {
+                    self.scheduleASRRelease(after: Self.asrDisconnectReleaseDelay)
+                }
+            }
         }
         service.onPortAssigned = { [weak self] port in
             DispatchQueue.main.async { self?.lanPort = port }
         }
 
-        // 非流式 ASR 回调：录完整段后一次性识别
+        // 手机开始录音：后台预加载模型，录完时基本已就绪
+        service.onAudioSessionStarted = { [weak self] in
+            DispatchQueue.main.async { self?.preloadASR() }
+        }
+
+        // 非流式 ASR 回调：录完整段后一次性识别（模型未加载则先加载）
         service.onAudioReceived = { [weak self] pcmData, sampleRate, connection, key in
-            guard let self = self, self.whisperASRService.isReady else {
-                service.sendASRError(to: connection, message: "Whisper 模型未就绪")
+            guard let self = self else { return }
+            let model = self.selectedASRModel
+            guard WhisperASRService.isModelDownloaded(model) else {
+                service.sendASRError(to: connection, message: "\(model.shortName) 模型未下载，请先在 Mac 端设置中下载")
                 return
             }
+            self.cancelASRRelease()
             DispatchQueue.global(qos: .userInitiated).async {
-                let text = self.whisperASRService.transcribe(pcmData: pcmData, sampleRate: sampleRate)
+                let result = self.whisperASRService.transcribe(pcmData: pcmData, sampleRate: sampleRate, model: model)
                 DispatchQueue.main.async {
-                    if text.isEmpty {
+                    self.scheduleASRRelease(after: Self.asrIdleReleaseDelay)
+                    switch result {
+                    case .none:
+                        self.asrError = "\(model.shortName) 模型加载失败"
+                        service.sendASRError(to: connection, message: "Whisper 模型加载失败")
+                    case .some(let text) where text.isEmpty:
                         service.sendASRError(to: connection, message: "识别结果为空")
-                    } else {
+                    case .some(let text):
                         service.sendASRFinal(to: connection, text: text)
                     }
                 }

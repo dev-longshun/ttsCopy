@@ -16,6 +16,7 @@ struct ttsCopyApp: App {
         Settings {
             SettingsView()
                 .environmentObject(appDelegate.serviceManager)
+                .environmentObject(appDelegate.updater)
         }
     }
 }
@@ -26,17 +27,23 @@ class KeyablePanel: NSPanel {
     override var canBecomeKey: Bool { true }
 }
 
+@MainActor
 class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     var statusItem: NSStatusItem?
     var panel: NSPanel?
     var eventMonitor: Any?
     let serviceManager = ServiceManager()
+    lazy var updater = UpdaterController()
     private var cancellables = Set<AnyCancellable>()
+    /// 菜单栏图标右上角的更新红点
+    private var updateBadgeView: NSView?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         setupMenuBar()
         bindStatusItemAppearance()
+        bindUpdateBadge()
+        updater.startDeferred()
 
         // Auto-start：根据上次的面板模式启动对应服务
         // 两个服务独立运行，这里只自动启动用户上次使用的模式
@@ -63,6 +70,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         let hostingView = NSHostingView(
             rootView: MenuBarView()
                 .environmentObject(serviceManager)
+                .environmentObject(updater)
         )
         hostingView.setFrameSize(NSSize(width: 320, height: 480))
 
@@ -101,6 +109,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             panel.setFrameOrigin(NSPoint(x: x, y: y))
             panel.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
+            updater.panelDidOpen()
 
             eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
                 self?.closePanel()
@@ -149,6 +158,44 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         image?.isTemplate = true
         button.image = image
         button.contentTintColor = tintColor
+    }
+
+    // MARK: - 更新红点
+
+    private func bindUpdateBadge() {
+        updater.$phase
+            .combineLatest(updater.$availableVersion)
+            .map { UpdaterController.badgeVisible(phase: $0, availableVersion: $1) }
+            .removeDuplicates()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] visible in
+                self?.setUpdateBadgeVisible(visible)
+            }
+            .store(in: &cancellables)
+    }
+
+    private func setUpdateBadgeVisible(_ visible: Bool) {
+        guard let button = statusItem?.button else { return }
+        if !visible {
+            updateBadgeView?.removeFromSuperview()
+            updateBadgeView = nil
+            return
+        }
+        guard updateBadgeView == nil else { return }
+
+        let size: CGFloat = 6
+        let dot = NSView(frame: NSRect(
+            x: button.bounds.maxX - size - 2,
+            y: button.isFlipped ? 3 : button.bounds.maxY - size - 3,
+            width: size,
+            height: size
+        ))
+        dot.wantsLayer = true
+        dot.layer?.backgroundColor = NSColor.systemRed.cgColor
+        dot.layer?.cornerRadius = size / 2
+        dot.autoresizingMask = button.isFlipped ? [.minXMargin, .maxYMargin] : [.minXMargin, .minYMargin]
+        button.addSubview(dot)
+        updateBadgeView = dot
     }
 
     func applicationWillTerminate(_ notification: Notification) {

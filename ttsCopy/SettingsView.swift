@@ -11,11 +11,13 @@ import Translation
 
 struct SettingsView: View {
     @EnvironmentObject var service: ServiceManager
+    @EnvironmentObject var updater: UpdaterController
     @Environment(\.dismiss) var dismiss
 
     @State private var botToken: String = ""
     @State private var newChatId: String = ""
-    @State private var launchAtLogin: Bool = false
+    // 读取系统里的真实状态，避免已开启时开关仍显示为关
+    @State private var launchAtLogin: Bool = SMAppService.mainApp.status == .enabled
     @State private var testResult: String = ""
     @State private var testSuccess: Bool? = nil
     @State private var isTesting: Bool = false
@@ -210,18 +212,7 @@ struct SettingsView: View {
                                 let model = service.selectedASRModel
                                 let downloaded = service.isASRModelDownloaded(model)
 
-                                if service.asrReady {
-                                    HStack(spacing: 6) {
-                                        Image(systemName: "checkmark.circle.fill")
-                                            .foregroundColor(.green)
-                                        Text("\(model.shortName) 已就绪")
-                                    }
-                                    if let info = service.asrModelInfo {
-                                        Text(info.summary)
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                    }
-                                } else if service.asrDownloading {
+                                if service.asrDownloading {
                                     VStack(alignment: .leading, spacing: 8) {
                                         HStack {
                                             Text("正在下载 \(model.shortName)...")
@@ -248,12 +239,32 @@ struct SettingsView: View {
                                                 .foregroundColor(.orange)
                                             Text(error)
                                         }
-                                    } else {
+                                    } else if service.asrLoading {
                                         HStack(spacing: 6) {
                                             ProgressView().scaleEffect(0.7)
                                             Text("模型加载中...")
                                         }
+                                    } else if service.asrLoadedModel == model {
+                                        HStack(spacing: 6) {
+                                            Image(systemName: "checkmark.circle.fill")
+                                                .foregroundColor(.green)
+                                            Text("\(model.shortName) 已加载到内存")
+                                        }
+                                        if let info = service.asrModelInfo {
+                                            Text(info.summary)
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                        }
+                                    } else {
+                                        HStack(spacing: 6) {
+                                            Image(systemName: "checkmark.circle")
+                                                .foregroundColor(.secondary)
+                                            Text("\(model.shortName) 已下载，收到语音时自动加载")
+                                        }
                                     }
+                                    Text("加载后约占用 \(model.sizeMB) MB 以上内存，闲置 \(Int(ServiceManager.asrIdleReleaseDelay / 60)) 分钟或手机全部断开后自动释放")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
                                 } else {
                                     Text("需要下载 \(model.shortName) 语音识别模型。")
                                         .font(.caption)
@@ -271,6 +282,35 @@ struct SettingsView: View {
                                     }
                                     .buttonStyle(.borderedProminent)
                                     .controlSize(.small)
+                                }
+
+                                // 已下载的模型：不用的可以删掉，释放硬盘空间
+                                let downloadedModels = ASRModel.allCases.filter { service.isASRModelDownloaded($0) }
+                                if !downloadedModels.isEmpty {
+                                    Divider()
+                                    Text("已下载的模型")
+                                        .font(.subheadline)
+                                        .foregroundColor(.secondary)
+                                    ForEach(downloadedModels) { item in
+                                        HStack {
+                                            Text(item.shortName)
+                                            Text("\(item.sizeMB) MB")
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                            if item == service.selectedASRModel {
+                                                Text("当前使用")
+                                                    .font(.caption)
+                                                    .foregroundColor(.accentColor)
+                                            }
+                                            Spacer()
+                                            Button(action: { service.deleteASRModel(item) }) {
+                                                Image(systemName: "trash").foregroundColor(.red)
+                                            }
+                                            .buttonStyle(.plain)
+                                            .disabled(service.asrDownloading)
+                                            .help("移到废纸篓")
+                                        }
+                                    }
                                 }
                             }
                             .padding(.vertical, 8)
@@ -444,6 +484,42 @@ struct SettingsView: View {
                         .padding(.vertical, 8)
                     }
 
+                    // 软件更新
+                    GroupBox {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Label("软件更新", systemImage: "arrow.down.circle")
+                                .font(.headline)
+                            HStack {
+                                Text("当前版本")
+                                Spacer()
+                                Text("v\(UpdaterController.currentVersionString())")
+                                    .font(.system(.body, design: .monospaced))
+                                    .foregroundColor(.secondary)
+                            }
+                            Toggle("自动检查更新", isOn: $updater.automaticallyChecksForUpdates)
+                                .toggleStyle(.switch)
+                            HStack(spacing: 8) {
+                                Button("检查更新") { updater.checkForUpdates() }
+                                    .buttonStyle(.bordered)
+                                    .disabled(!updater.canCheckForUpdates)
+                                if updater.phase == .available || (updater.phase == .failed && updater.availableVersion != nil) {
+                                    Button("更新并重启") { updater.installAndRelaunch() }
+                                        .buttonStyle(.borderedProminent)
+                                }
+                                if updater.phase == .checking || updater.phase == .downloading || updater.phase == .installing {
+                                    ProgressView().scaleEffect(0.7)
+                                }
+                                Spacer()
+                            }
+                            if !updater.statusMessage.isEmpty {
+                                Text(updater.statusMessage)
+                                    .font(.caption)
+                                    .foregroundColor(updater.phase == .failed ? .red : .secondary)
+                            }
+                        }
+                        .padding(.vertical, 8)
+                    }
+
                     // 其他设置
                     GroupBox {
                         VStack(alignment: .leading, spacing: 12) {
@@ -591,4 +667,5 @@ struct BulletPoint: View {
 #Preview {
     SettingsView()
         .environmentObject(ServiceManager())
+        .environmentObject(UpdaterController())
 }

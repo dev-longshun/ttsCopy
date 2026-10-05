@@ -56,11 +56,37 @@ ttsCopy-lan/
 └── DEVELOPMENT.md                # 开发文档（架构/协议/进度）
 ```
 
+## 安装与更新
+
+从本仓库 [Releases](https://github.com/dev-longshun/ttsCopy/releases) 下载最新的 `ttsCopy-*.dmg`，打开后把 `ttsCopy.app` 拖进「应用程序」即可。安装包已经过 Developer ID 签名和苹果公证，双击就能打开。
+
+之后的更新在 App 内完成：
+
+- 启动时、每 30 分钟、打开菜单栏面板时（距上次检查超过 10 分钟）会在后台检查 GitHub Releases
+- 发现新版本时，菜单栏图标出现红点并弹出系统通知
+- 在面板里点「更新并重启」，App 会下载新版、校验签名、替换自身并重新打开
+- 设置 →「软件更新」可以关闭自动检查，或手动检查
+
+> 只在一台 Mac 上使用：Telegram Bot 同一时间只允许一处监听。两台 Mac 同时监听同一个 Bot 时，App 会提示「另一台设备正在使用这个 Bot」并停止本机监听，需要时点「在本机接管」。
+
 ## 编译运行
 
-用 Xcode 打开 `ttsCopy.xcodeproj`，按 `Cmd + R` 运行。
+用 Xcode 打开 `ttsCopy.xcodeproj`，按 `Cmd + R` 运行。Xcode 调试版不会自动检查更新，也不会在应用内安装更新。
 
 > 详细的零基础教程见 [编译运行指南.md](编译运行指南.md)
+
+## 发版
+
+push 到 `main` 会触发 `.github/workflows/build-dmg.yml`：编译 → Developer ID 签名 → 公证 → 打 DMG → 发布 GitHub Release，版本号为 `<MARKETING_VERSION>.<运行序号>`（如 `1.0.4.12`）。只改文档（README、DEVELOPMENT.md 等）不会发版。
+
+首次使用前，在仓库 Settings → Secrets and variables → Actions 中配置：
+
+- `DEVELOPER_ID_P12`：「Developer ID Application」证书（含私钥）导出的 `.p12`，base64 编码
+- `DEVELOPER_ID_P12_PASSWORD`：导出 `.p12` 时设置的密码
+- `APPLE_ID`：Apple 开发者账号邮箱
+- `APPLE_APP_PASSWORD`：在 appleid.apple.com 生成的 App 专用密码
+
+whisper.cpp 版本固定在 `scripts/build-whisper.sh` 的 `WHISPER_CPP_REF`，升级时改这里。
 
 ## 使用方法
 
@@ -73,6 +99,10 @@ ttsCopy-lan/
 5. 在手机上发送文字或图片，Mac 剪贴板自动更新
 
 手机端 App 项目：[ttsCopy-mobile](../ttsCopy-mobile/)
+
+### 语音识别内存占用
+
+Whisper 模型不会在启动时加载：手机开始录音时在后台加载，识别后闲置 5 分钟、或手机全部断开 30 秒后自动释放。平时 App 只占几十 MB 内存。不用的模型可以在设置 →「已下载的模型」里删除（移到废纸篓）。
 
 ### 提示词优化
 

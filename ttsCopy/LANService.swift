@@ -34,6 +34,8 @@ class LANService {
 
     // 非流式 ASR 回调：录完整段后一次性回调
     var onAudioReceived: ((Data, Int, NWConnection, String) -> Void)?
+    /// 手机开始录音（audio_start），用于提前加载语音识别模型
+    var onAudioSessionStarted: (() -> Void)?
 
     /// 默认固定端口，避免每次重启都分配新端口
     static let defaultPort: UInt16 = 8765
@@ -209,6 +211,7 @@ class LANService {
             let sampleRate = json["sampleRate"] as? Int ?? 16000
             audioSessions[key] = AudioSession(sampleRate: sampleRate, sender: sender, pcmBuffer: Data())
             print("🎙️ [LAN] 音频会话开始: \(key), sampleRate=\(sampleRate)")
+            onAudioSessionStarted?()
 
         case "audio_stop":
             let key = connection.endpoint.debugDescription

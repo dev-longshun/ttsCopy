@@ -369,7 +369,7 @@ class MessageProcessor {
         }
     }
 
-    private func sendNotification(title: String, body: String) {
+    func sendNotification(title: String, body: String) {
         let content = UNMutableNotificationContent()
         content.title = "TTS Copy - \(title)"
         content.body = body

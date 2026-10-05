@@ -16,6 +16,7 @@ class WhisperContext {
     static func createContext(path: String) -> WhisperContext? {
         var params = whisper_context_default_params()
         params.use_gpu = true  // Metal GPU 加速
+        params.flash_attn = true  // Flash Attention：减少推理时的 KV 缓存和中间缓冲内存
 
         guard let ctx = whisper_init_from_file_with_params(path, params) else {
             print("❌ [Whisper] 无法加载模型: \(path)")
