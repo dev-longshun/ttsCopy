@@ -96,14 +96,40 @@ class MessageProcessor {
         }
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyyMMdd_HHmmss"
-        let fileName = "ttscopy_\(formatter.string(from: Date())).jpg"
-        let fileURL = dirURL.appendingPathComponent(fileName)
+        let baseName = "ttscopy_\(formatter.string(from: Date()))"
+        let ext = Self.imageFileExtension(for: imageData)
+        var fileURL = dirURL.appendingPathComponent("\(baseName).\(ext)")
+        // 同一秒连发多张时文件名相同，追加序号避免互相覆盖
+        var index = 1
+        while FileManager.default.fileExists(atPath: fileURL.path) {
+            fileURL = dirURL.appendingPathComponent("\(baseName)_\(index).\(ext)")
+            index += 1
+        }
         do {
             try imageData.write(to: fileURL)
             print("   ✅ 图片已保存到: \(fileURL.path)")
         } catch {
             print("   ❌ 保存图片失败: \(error)")
         }
+    }
+
+    /// 按文件头判断图片格式；Telegram 压缩过的图片都是 JPEG，按文件发送的保留原格式
+    private static func imageFileExtension(for data: Data) -> String {
+        let bytes = [UInt8](data.prefix(12))
+        if bytes.starts(with: [0x89, 0x50, 0x4E, 0x47]) { return "png" }
+        if bytes.starts(with: [0x47, 0x49, 0x46, 0x38]) { return "gif" }
+        guard bytes.count == 12 else { return "jpg" }
+        // RIFF....WEBP
+        if bytes.starts(with: [0x52, 0x49, 0x46, 0x46]), bytes[8..<12].elementsEqual([0x57, 0x45, 0x42, 0x50]) {
+            return "webp"
+        }
+        // ....ftyp + HEIF 品牌
+        if bytes[4..<8].elementsEqual([0x66, 0x74, 0x79, 0x70]),
+           let brand = String(bytes: bytes[8..<12], encoding: .ascii),
+           ["heic", "heix", "hevc", "mif1"].contains(brand) {
+            return "heic"
+        }
+        return "jpg"
     }
 
     private func requestNotificationPermission() {

@@ -29,6 +29,9 @@ class TelegramService {
     private static let conflictWindow: TimeInterval = 120
     private static let conflictThreshold = 2
 
+    /// Bot API getFile 的下载上限
+    private static let maxDownloadSize = 20 * 1024 * 1024
+
     var isPolling: Bool { pollingTask != nil && !(pollingTask?.isCancelled ?? true) }
 
     func startPolling() {
@@ -143,6 +146,18 @@ class TelegramService {
                     "Telegram", chatTitle, senderName, Int64(message.messageId)
                 )
             }
+        } else if let document = message.document, document.isImage {
+            // 按「文件」发送的图片（不压缩），Bot API 最多只能下载 20MB
+            if let fileSize = document.fileSize, fileSize > Self.maxDownloadSize {
+                print("   ⚠️ 图片文件超过 20MB，Bot API 无法下载: \(document.fileName ?? document.fileId)")
+                return
+            }
+            if let imageData = await downloadFile(fileId: document.fileId) {
+                await onMessage?(
+                    .photo(imageData, caption: message.caption),
+                    "Telegram", chatTitle, senderName, Int64(message.messageId)
+                )
+            }
         } else if let text = message.text, !text.isEmpty {
             await onMessage?(
                 .text(text),
@@ -232,10 +247,33 @@ struct TelegramMessage: Codable {
     let text: String?
     let caption: String?
     let photo: [TelegramPhotoSize]?
+    let document: TelegramDocument?
     let date: Int
     enum CodingKeys: String, CodingKey {
         case messageId = "message_id"
-        case from, chat, text, caption, photo, date
+        case from, chat, text, caption, photo, document, date
+    }
+}
+
+struct TelegramDocument: Codable {
+    let fileId: String
+    let fileName: String?
+    let mimeType: String?
+    let fileSize: Int?
+    enum CodingKeys: String, CodingKey {
+        case fileId = "file_id"
+        case fileName = "file_name"
+        case mimeType = "mime_type"
+        case fileSize = "file_size"
+    }
+
+    private static let imageExtensions: Set<String> = ["png", "jpg", "jpeg", "gif", "webp", "heic"]
+
+    /// MIME 类型是 image/*，或扩展名是常见图片格式（部分客户端不带 MIME 类型）
+    var isImage: Bool {
+        if mimeType?.hasPrefix("image/") == true { return true }
+        guard let fileName = fileName else { return false }
+        return Self.imageExtensions.contains((fileName as NSString).pathExtension.lowercased())
     }
 }
 
